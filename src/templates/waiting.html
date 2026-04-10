@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #333;
+        }
+        .container {
+            background: white;
+            border-radius: 16px;
+            padding: 48px;
+            max-width: 480px;
+            width: 90%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            text-align: center;
+        }
+        .logo { max-height: 48px; margin-bottom: 24px; }
+        h1 { font-size: 24px; margin-bottom: 8px; color: #1a1a2e; }
+        .subtitle { color: #666; margin-bottom: 32px; font-size: 14px; }
+        .position {
+            font-size: 64px;
+            font-weight: 800;
+            color: #667eea;
+            line-height: 1;
+            margin-bottom: 4px;
+        }
+        .position-label { color: #999; font-size: 13px; margin-bottom: 24px; }
+        .progress-bar {
+            background: #e9ecef;
+            border-radius: 12px;
+            height: 12px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+        .progress-fill {
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            height: 100%;
+            border-radius: 12px;
+            transition: width 0.5s ease;
+        }
+        .progress-text { color: #999; font-size: 13px; margin-bottom: 24px; }
+        .eta {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 24px;
+        }
+        .eta-value { font-size: 20px; font-weight: 600; color: #1a1a2e; }
+        .eta-label { font-size: 12px; color: #999; margin-top: 4px; }
+        .notice { color: #999; font-size: 12px; line-height: 1.6; }
+        .footer { margin-top: 32px; color: #ccc; font-size: 11px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        {% if logo_url %}
+        <img class="logo" src="{{ logo_url }}" alt="Logo">
+        {% endif %}
+        <h1>{{ page_title }}</h1>
+        <p class="subtitle">현재 접속자가 많아 대기 중입니다</p>
+
+        <div class="position" id="position">#{{ position }}</div>
+        <div class="position-label">대기 순번</div>
+
+        <div class="progress-bar">
+            <div class="progress-fill" id="progress" style="width: {{ progress_pct }}%"></div>
+        </div>
+        <div class="progress-text" id="progress-text">{{ progress_pct }}%</div>
+
+        <div class="eta">
+            <div class="eta-value" id="eta">{{ eta_display }}</div>
+            <div class="eta-label">예상 대기 시간</div>
+        </div>
+
+        <p class="notice">
+            이 탭을 열어두세요. 순서가 되면 자동으로 이동합니다.<br>
+            페이지를 새로고침하면 순번이 유지됩니다.
+        </p>
+
+        <div class="footer">Powered by Waiting Room</div>
+    </div>
+
+    <script>
+        let es;
+
+        function formatEta(secs) {
+            if (secs < 60) return '1분 미만';
+            if (secs < 3600) return Math.ceil(secs / 60) + '분';
+            const h = Math.floor(secs / 3600);
+            const m = Math.ceil((secs % 3600) / 60);
+            return h + '시간 ' + m + '분';
+        }
+
+        function connect() {
+            es = new EventSource("/__wr/events");
+            es.onmessage = function(e) {
+                const data = JSON.parse(e.data);
+                if (data.action === "admit") {
+                    window.location.href = "/";
+                    return;
+                }
+                document.getElementById("position").textContent = "#" + data.position.toLocaleString();
+                document.getElementById("eta").textContent = formatEta(data.eta_seconds);
+                document.getElementById("progress").style.width = data.progress_pct + "%";
+                document.getElementById("progress-text").textContent = Math.round(data.progress_pct) + "%";
+            };
+            es.onerror = function() {
+                es.close();
+                setTimeout(connect, 5000);
+            };
+        }
+
+        connect();
+    </script>
+</body>
+</html>

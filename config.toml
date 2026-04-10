@@ -1,0 +1,15 @@
+listen_addr = "0.0.0.0:8080"
+origin_url = "http://127.0.0.1:3000"
+max_active_users = 100
+session_ttl_secs = 5
+queue_cookie_name = "__wr_token"
+admin_api_key = "change-me-in-production"
+enabled = true
+redis_url = ""
+
+[branding]
+page_title = "Please wait..."
+logo_url = ""
+
+[advanced]
+reaper_interval_secs = 1
