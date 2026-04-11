@@ -145,8 +145,12 @@ export function SchedulesPage() {
                   <div className="text-xs text-gray-400 mt-1 space-x-3">
                     <span>Start: {formatTime(s.start_at)}</span>
                     <span>End: {formatTime(s.end_at)}</span>
-                    {s.origin_url && <span>Origin: {s.origin_url}</span>}
                   </div>
+                  {s.origin_url && (
+                    <div className="text-xs text-gray-400 mt-0.5 truncate">
+                      Origin: {s.origin_url}
+                    </div>
+                  )}
                 </div>
                 <button
                   onClick={() => handleDelete(s.id, s.name)}
