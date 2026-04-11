@@ -118,6 +118,28 @@ export function SchedulesPage() {
     }
   };
 
+  const handleQuickTest = async () => {
+    setError('');
+    setCreating(true);
+    try {
+      const now = new Date();
+      const end = new Date(now.getTime() + 5 * 60 * 1000);
+      await api.createSchedule({
+        name: `Quick Test`,
+        start_at: now.toISOString(),
+        end_at: end.toISOString(),
+        max_active_users: maxActive ? parseInt(maxActive) : 100,
+      });
+      setMessage('테스트 스케줄이 생성되었습니다 (5분간).');
+      setTimeout(() => setMessage(''), 3000);
+      fetchSchedules();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to create quick test');
+    } finally {
+      setCreating(false);
+    }
+  };
+
   const handleDelete = async (id: string, scheduleName: string) => {
     if (!confirm(`"${scheduleName}" 스케줄을 삭제하시겠습니까?`)) return;
     try {
@@ -292,13 +314,23 @@ export function SchedulesPage() {
           <div className="bg-green-50 text-green-600 text-sm rounded-lg p-3 mb-4">{message}</div>
         )}
 
-        <button
-          type="submit"
-          disabled={creating}
-          className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
-        >
-          {creating ? 'Creating...' : 'Create Schedule'}
-        </button>
+        <div className="flex gap-3">
+          <button
+            type="submit"
+            disabled={creating}
+            className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+          >
+            {creating ? 'Creating...' : 'Create Schedule'}
+          </button>
+          <button
+            type="button"
+            onClick={handleQuickTest}
+            disabled={creating}
+            className="px-6 py-2.5 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 disabled:opacity-50"
+          >
+            Quick Test (5min)
+          </button>
+        </div>
       </form>
     </div>
   );
