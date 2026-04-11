@@ -5,7 +5,7 @@ use axum::middleware::Next;
 use axum::response::IntoResponse;
 use axum::{Json, Router, routing::{delete, get}};
 use std::sync::Arc;
-use crate::scheduler::{CreateScheduleRequest, Schedule};
+use crate::scheduler::{CreateScheduleRequest, Schedule, SchedulePhase};
 use crate::state::AppState;
 
 pub fn admin_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
@@ -66,6 +66,20 @@ async fn create_schedule(
         return Err((StatusCode::BAD_REQUEST, Json(serde_json::json!({
             "error": "start_at must be before end_at"
         }))));
+    }
+
+    // Check for overlap with existing schedules (exclude ended ones)
+    let existing = crate::schedule_store::load_schedules(&state).await;
+    for s in &existing {
+        if s.phase == SchedulePhase::Ended {
+            continue;
+        }
+        // Two intervals overlap if one starts before the other ends and vice versa
+        if req.start_at < s.end_at && req.end_at > s.start_at {
+            return Err((StatusCode::CONFLICT, Json(serde_json::json!({
+                "error": format!("기존 스케줄 '{}' (id: {}) 일정과 겹칩니다", s.name, s.id)
+            }))));
+        }
     }
 
     let schedule = Schedule::new(req);
