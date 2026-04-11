@@ -7,6 +7,7 @@ mod pubsub;
 mod queue;
 mod reaper;
 mod redis_backend;
+mod schedule_store;
 mod scheduler;
 mod session;
 mod state;

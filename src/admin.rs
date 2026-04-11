@@ -114,7 +114,7 @@ async fn flush(State(state): State<Arc<AppState>>) -> impl IntoResponse {
 // --- Schedule endpoints ---
 
 async fn list_schedules(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let schedules = state.schedules.read().clone();
+    let schedules = crate::schedule_store::load_schedules(&state).await;
     Json(serde_json::json!({"schedules": schedules}))
 }
 
@@ -133,7 +133,7 @@ async fn create_schedule(
         "status": "created",
         "schedule": schedule,
     });
-    state.schedules.write().push(schedule);
+    crate::schedule_store::save_schedule(&state, &schedule).await;
     Ok((StatusCode::CREATED, Json(response)))
 }
 
@@ -141,10 +141,7 @@ async fn delete_schedule(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    let mut schedules = state.schedules.write();
-    let before = schedules.len();
-    schedules.retain(|s| s.id != id);
-    if schedules.len() < before {
+    if crate::schedule_store::remove_schedule(&state, &id).await {
         Json(serde_json::json!({"status": "deleted", "id": id}))
     } else {
         Json(serde_json::json!({"status": "not_found", "id": id}))

@@ -115,7 +115,12 @@ pub fn spawn_scheduler(state: Arc<AppState>) {
         loop {
             tokio::time::sleep(Duration::from_secs(1)).await;
 
-            let schedule_state = {
+            let schedule_state = if state.redis_pool.is_some() {
+                let mut schedules = crate::schedule_store::load_schedules(&state).await;
+                let result = evaluate_schedules(&mut schedules);
+                *state.schedules.write() = schedules;
+                result
+            } else {
                 let mut schedules = state.schedules.write();
                 evaluate_schedules(&mut schedules)
             };
