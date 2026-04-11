@@ -110,9 +110,7 @@ export function Dashboard() {
             {activeSchedule.max_active_users && (
               <span>Max Active: {activeSchedule.max_active_users}</span>
             )}
-            {activeSchedule.origin_url && (
-              <span>Origin: {activeSchedule.origin_url}</span>
-            )}
+            <span>Origin: {activeSchedule.origin_url ?? 'null'}</span>
           </div>
           {activeSchedule.stats && (
             <div className="grid grid-cols-4 gap-2 mt-3 pt-3 border-t border-indigo-200">
@@ -154,9 +152,7 @@ export function Dashboard() {
                 {lastEndedSchedule.max_active_users && (
                   <span>Max Active: {lastEndedSchedule.max_active_users}</span>
                 )}
-                {lastEndedSchedule.origin_url && (
-                  <span>Origin: {lastEndedSchedule.origin_url}</span>
-                )}
+                <span>Origin: {lastEndedSchedule.origin_url ?? 'null'}</span>
               </div>
               {lastEndedSchedule.stats && (
                 <div className="grid grid-cols-4 gap-2 mt-3 pt-3 border-t border-gray-200">
@@ -195,9 +191,7 @@ export function Dashboard() {
                 {nextPendingSchedule.max_active_users && (
                   <span>Max Active: {nextPendingSchedule.max_active_users}</span>
                 )}
-                {nextPendingSchedule.origin_url && (
-                  <span>Origin: {nextPendingSchedule.origin_url}</span>
-                )}
+                <span>Origin: {nextPendingSchedule.origin_url ?? 'null'}</span>
               </div>
             </div>
           )}
