@@ -5,7 +5,7 @@ use axum::response::IntoResponse;
 use std::sync::Arc;
 
 use crate::backend::GateResult;
-use crate::proxy::forward_request;
+use crate::proxy::{forward_request, should_redirect};
 use crate::queue::SessionId;
 use crate::state::AppState;
 use crate::waiting;
@@ -44,17 +44,39 @@ pub async fn gate_handler(
     let used_id = existing_id.unwrap_or(new_id);
     let needs_cookie = existing_id.is_none();
 
+    let origin_url = state.config.read().origin_url.clone();
+    let req_host = req.headers().get(header::HOST)
+        .and_then(|v| v.to_str().ok());
+    let use_redirect = should_redirect(&origin_url, req_host);
+
     match result {
         GateResult::Active | GateResult::Admitted => {
-            let mut resp = match forward_request(&state, req).await {
-                Ok(resp) => resp,
-                Err(status) => return status.into_response().into(),
-            };
-            if needs_cookie {
-                let token = state.session_mgr.create_token(used_id);
-                set_cookie(&mut resp, &cookie_name, &token);
+            if use_redirect {
+                let path_and_query = req.uri().path_and_query()
+                    .map(|pq| pq.as_str())
+                    .unwrap_or("/");
+                let target = format!("{}{}", origin_url, path_and_query);
+                let mut resp = Response::builder()
+                    .status(302)
+                    .header(header::LOCATION, &target)
+                    .body(Body::empty())
+                    .unwrap();
+                if needs_cookie {
+                    let token = state.session_mgr.create_token(used_id);
+                    set_cookie(&mut resp, &cookie_name, &token);
+                }
+                resp
+            } else {
+                let mut resp = match forward_request(&state, req).await {
+                    Ok(resp) => resp,
+                    Err(status) => return status.into_response().into(),
+                };
+                if needs_cookie {
+                    let token = state.session_mgr.create_token(used_id);
+                    set_cookie(&mut resp, &cookie_name, &token);
+                }
+                resp
             }
-            resp
         }
         GateResult::Waiting { .. } => {
             waiting::serve_waiting_page(&state, used_id).await

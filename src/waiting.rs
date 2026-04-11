@@ -9,6 +9,7 @@ use std::sync::Arc;
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::BroadcastStream;
 
+use crate::proxy::should_redirect;
 use crate::queue::SessionId;
 use crate::state::AppState;
 
@@ -22,6 +23,8 @@ struct SseData {
     progress_pct: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     action: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    redirect_url: Option<String>,
 }
 
 pub async fn serve_waiting_page(state: &Arc<AppState>, session_id: SessionId) -> Response<Body> {
@@ -77,6 +80,15 @@ pub async fn sse_handler(
         }
     };
 
+    let origin_url = state.config.read().origin_url.clone();
+    let req_host = req.headers().get(header::HOST)
+        .and_then(|v| v.to_str().ok());
+    let redirect_url = if should_redirect(&origin_url, req_host) {
+        Some(origin_url)
+    } else {
+        None
+    };
+
     // Send initial state immediately on connect
     let initial_event = if state.queue.is_active(&session_id).await {
         let data = SseData {
@@ -85,6 +97,7 @@ pub async fn sse_handler(
             eta_seconds: 0.0,
             progress_pct: 100.0,
             action: Some("admit".to_string()),
+            redirect_url: redirect_url.clone(),
         };
         Some(Ok::<_, Infallible>(
             Event::default().data(serde_json::to_string(&data).unwrap()),
@@ -102,6 +115,7 @@ pub async fn sse_handler(
             eta_seconds: pos.eta_seconds,
             progress_pct: progress,
             action: None,
+            redirect_url: None,
         };
         Some(Ok(Event::default().data(serde_json::to_string(&data).unwrap())))
     } else {
@@ -116,6 +130,7 @@ pub async fn sse_handler(
     let state_clone = state.clone();
     let update_stream = stream.then(move |_| {
         let state = state_clone.clone();
+        let redirect_url = redirect_url.clone();
         async move {
             if state.queue.is_active(&session_id).await {
                 let data = SseData {
@@ -124,6 +139,7 @@ pub async fn sse_handler(
                     eta_seconds: 0.0,
                     progress_pct: 100.0,
                     action: Some("admit".to_string()),
+                    redirect_url,
                 };
                 Some(Ok::<_, Infallible>(
                     Event::default().data(serde_json::to_string(&data).unwrap()),
@@ -141,6 +157,7 @@ pub async fn sse_handler(
                     eta_seconds: pos.eta_seconds,
                     progress_pct: progress,
                     action: None,
+                    redirect_url: None,
                 };
                 Some(Ok(Event::default().data(serde_json::to_string(&data).unwrap())))
             } else if !state.is_enabled() {
@@ -151,6 +168,7 @@ pub async fn sse_handler(
                     eta_seconds: 0.0,
                     progress_pct: 0.0,
                     action: Some("closed".to_string()),
+                    redirect_url: None,
                 };
                 Some(Ok(Event::default().data(serde_json::to_string(&data).unwrap())))
             } else {

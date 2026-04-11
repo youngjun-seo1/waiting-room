@@ -115,7 +115,7 @@
             es.onmessage = function(e) {
                 const data = JSON.parse(e.data);
                 if (data.action === "admit") {
-                    window.location.href = "/";
+                    window.location.href = data.redirect_url || "/";
                     return;
                 }
                 if (data.action === "closed") {
