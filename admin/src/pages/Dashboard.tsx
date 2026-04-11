@@ -31,6 +31,7 @@ interface Schedule {
   end_at: string;
   max_active_users: number | null;
   origin_url: string | null;
+  session_ttl_secs: number | null;
   phase: string;
   stats?: ScheduleStats;
 }
@@ -110,6 +111,9 @@ export function Dashboard() {
             {activeSchedule.max_active_users && (
               <span>Max Active: {activeSchedule.max_active_users}</span>
             )}
+            {activeSchedule.session_ttl_secs && (
+              <span>TTL: {activeSchedule.session_ttl_secs}s</span>
+            )}
             <span>Origin: {activeSchedule.origin_url ?? 'null'}</span>
           </div>
           {activeSchedule.stats && (
@@ -152,6 +156,9 @@ export function Dashboard() {
                 {lastEndedSchedule.max_active_users && (
                   <span>Max Active: {lastEndedSchedule.max_active_users}</span>
                 )}
+                {lastEndedSchedule.session_ttl_secs && (
+                  <span>TTL: {lastEndedSchedule.session_ttl_secs}s</span>
+                )}
                 <span>Origin: {lastEndedSchedule.origin_url ?? 'null'}</span>
               </div>
               {lastEndedSchedule.stats && (
@@ -190,6 +197,9 @@ export function Dashboard() {
                 <span>{formatRange(nextPendingSchedule.start_at, nextPendingSchedule.end_at)}</span>
                 {nextPendingSchedule.max_active_users && (
                   <span>Max Active: {nextPendingSchedule.max_active_users}</span>
+                )}
+                {nextPendingSchedule.session_ttl_secs && (
+                  <span>TTL: {nextPendingSchedule.session_ttl_secs}s</span>
                 )}
                 <span>Origin: {nextPendingSchedule.origin_url ?? 'null'}</span>
               </div>

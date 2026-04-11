@@ -15,6 +15,7 @@ interface Schedule {
   end_at: string;
   max_active_users: number | null;
   origin_url: string | null;
+  session_ttl_secs: number | null;
   phase: string;
   stats?: ScheduleStats;
 }
@@ -51,8 +52,12 @@ export function SchedulesPage() {
   const [name, setName] = useState('');
   const [startAt, setStartAt] = useState(nowLocal);
   const [endAt, setEndAt] = useState(nowLocal);
-  const [maxActive, setMaxActive] = useState('100');
+  const [maxActive, setMaxActive] = useState('');
   const [originUrl, setOriginUrl] = useState('');
+  const [sessionTtl, setSessionTtl] = useState('');
+
+  const [defaultMaxActive, setDefaultMaxActive] = useState('100');
+  const [defaultSessionTtl, setDefaultSessionTtl] = useState('');
 
   const fetchSchedules = useCallback(async () => {
     try {
@@ -73,6 +78,17 @@ export function SchedulesPage() {
     const timer = setInterval(fetchSchedules, 5000);
     return () => clearInterval(timer);
   }, [fetchSchedules]);
+
+  useEffect(() => {
+    api.getConfig().then((cfg: Record<string, unknown>) => {
+      const max = String(cfg.max_active_users ?? '100');
+      const ttl = String(cfg.session_ttl_secs ?? '');
+      setDefaultMaxActive(max);
+      setDefaultSessionTtl(ttl);
+      setMaxActive(max);
+      setSessionTtl(ttl);
+    }).catch(() => {});
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,13 +117,15 @@ export function SchedulesPage() {
       };
       if (maxActive) data.max_active_users = parseInt(maxActive);
       if (originUrl.trim()) data.origin_url = originUrl.trim();
+      if (sessionTtl) data.session_ttl_secs = parseInt(sessionTtl);
       await api.createSchedule(data);
 
       setName('');
       setStartAt(nowLocal());
       setEndAt(nowLocal());
-      setMaxActive('100');
+      setMaxActive(defaultMaxActive);
       setOriginUrl('');
+      setSessionTtl(defaultSessionTtl);
       setMessage('스케줄이 등록되었습니다.');
       setTimeout(() => setMessage(''), 3000);
       fetchSchedules();
@@ -128,7 +146,7 @@ export function SchedulesPage() {
         name: `Quick Test`,
         start_at: now.toISOString(),
         end_at: end.toISOString(),
-        max_active_users: maxActive ? parseInt(maxActive) : 100,
+        max_active_users: maxActive ? parseInt(maxActive) : parseInt(defaultMaxActive),
       });
       setMessage('테스트 스케줄이 생성되었습니다 (5분간).');
       setTimeout(() => setMessage(''), 3000);
@@ -180,6 +198,9 @@ export function SchedulesPage() {
                       {s.max_active_users && (
                         <span className="text-xs text-gray-400">max: {s.max_active_users}</span>
                       )}
+                      <span className="text-xs text-gray-400">
+                        ttl: {s.session_ttl_secs ?? defaultSessionTtl}s{!s.session_ttl_secs && ' (default)'}
+                      </span>
                     </div>
                     <div className="text-xs text-gray-400 mt-1 space-x-3">
                       <span>Start: {formatTime(s.start_at)}</span>
@@ -252,7 +273,7 @@ export function SchedulesPage() {
       <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-gray-200 p-6">
         <h2 className="text-lg font-semibold mb-4">New Schedule</h2>
 
-        <div className="grid grid-cols-2 gap-4 mb-4">
+        <div className="grid grid-cols-3 gap-4 mb-4">
           <div>
             <label className="block text-sm text-gray-600 mb-1">Name *</label>
             <input
@@ -270,6 +291,16 @@ export function SchedulesPage() {
               value={maxActive}
               onChange={(e) => setMaxActive(e.target.value)}
               placeholder="100 (optional)"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Session TTL (초)</label>
+            <input
+              type="number"
+              value={sessionTtl}
+              onChange={(e) => setSessionTtl(e.target.value)}
+              placeholder="미입력 시 서버 기본값"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
             />
           </div>

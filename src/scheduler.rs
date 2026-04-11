@@ -30,6 +30,9 @@ pub struct Schedule {
     /// Override origin_url for this schedule
     #[serde(default)]
     pub origin_url: Option<String>,
+    /// Override session_ttl_secs for this schedule (defaults to server config)
+    #[serde(default)]
+    pub session_ttl_secs: Option<u64>,
     /// Current phase
     #[serde(default)]
     pub phase: SchedulePhase,
@@ -54,6 +57,7 @@ pub struct CreateScheduleRequest {
     pub end_at: DateTime<Utc>,
     pub max_active_users: Option<u32>,
     pub origin_url: Option<String>,
+    pub session_ttl_secs: Option<u64>,
 }
 
 impl Schedule {
@@ -65,6 +69,7 @@ impl Schedule {
             end_at: req.end_at,
             max_active_users: req.max_active_users,
             origin_url: req.origin_url,
+            session_ttl_secs: req.session_ttl_secs,
             phase: SchedulePhase::Pending,
             stats: ScheduleStats::default(),
         }
@@ -76,6 +81,7 @@ pub struct ScheduleState {
     pub enabled: bool,
     pub max_active_override: Option<u32>,
     pub origin_url_override: Option<String>,
+    pub session_ttl_override: Option<u64>,
     pub active_schedule: Option<String>, // schedule name
     pub active_schedule_id: Option<String>,
     /// A schedule just transitioned to Active
@@ -92,6 +98,7 @@ pub fn evaluate_schedules(schedules: &mut Vec<Schedule>) -> ScheduleState {
         enabled: false,
         max_active_override: None,
         origin_url_override: None,
+        session_ttl_override: None,
         active_schedule: None,
         active_schedule_id: None,
         just_started: false,
@@ -122,6 +129,7 @@ pub fn evaluate_schedules(schedules: &mut Vec<Schedule>) -> ScheduleState {
             result.enabled = true;
             result.max_active_override = schedule.max_active_users;
             result.origin_url_override = schedule.origin_url.clone();
+            result.session_ttl_override = schedule.session_ttl_secs;
             result.active_schedule = Some(schedule.name.clone());
             result.active_schedule_id = Some(schedule.id.clone());
             return result;
@@ -183,6 +191,9 @@ pub fn spawn_scheduler(state: Arc<AppState>) {
                 }
                 if let Some(url) = &schedule_state.origin_url_override {
                     config.origin_url = url.clone();
+                }
+                if let Some(ttl) = schedule_state.session_ttl_override {
+                    config.session_ttl_secs = ttl;
                 }
             } else {
                 state.set_enabled_sync(false).await;

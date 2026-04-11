@@ -8,6 +8,7 @@ interface Schedule {
   end_at: string;
   max_active_users: number | null;
   origin_url: string | null;
+  session_ttl_secs: number | null;
   phase: string;
 }
 
@@ -45,6 +46,9 @@ const ScheduleList = memo(function ScheduleList({
               {s.max_active_users && (
                 <span className="text-xs text-gray-400">max: {s.max_active_users}</span>
               )}
+              <span className="text-xs text-gray-400">
+                ttl: {s.session_ttl_secs ?? '?'}s{!s.session_ttl_secs && ' (default)'}
+              </span>
             </div>
             <div className="text-xs text-gray-400 mt-1">
               Start: {formatTime(s.start_at)} / End: {formatTime(s.end_at)}{s.origin_url && ` / Origin: ${s.origin_url}`}
@@ -67,6 +71,7 @@ function ScheduleForm({ onCreated }: { onCreated: () => void }) {
   const startAtRef = useRef<HTMLInputElement>(null);
   const endAtRef = useRef<HTMLInputElement>(null);
   const maxActiveRef = useRef<HTMLInputElement>(null);
+  const sessionTtlRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
 
@@ -89,11 +94,14 @@ function ScheduleForm({ onCreated }: { onCreated: () => void }) {
         end_at: new Date(endAt).toISOString(),
       };
       if (maxActive) data.max_active_users = parseInt(maxActive);
+      const sessionTtl = sessionTtlRef.current?.value || '';
+      if (sessionTtl) data.session_ttl_secs = parseInt(sessionTtl);
       await api.createSchedule(data);
       if (nameRef.current) nameRef.current.value = '';
       if (startAtRef.current) startAtRef.current.value = '';
       if (endAtRef.current) endAtRef.current.value = '';
       if (maxActiveRef.current) maxActiveRef.current.value = '';
+      if (sessionTtlRef.current) sessionTtlRef.current.value = '';
       setError('');
       onCreated();
     } catch (e: unknown) {
@@ -122,6 +130,15 @@ function ScheduleForm({ onCreated }: { onCreated: () => void }) {
             ref={maxActiveRef}
             type="number"
             placeholder="100"
+            className="w-full border rounded-lg px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Session TTL (초)</label>
+          <input
+            ref={sessionTtlRef}
+            type="number"
+            placeholder="미입력 시 서버 기본값"
             className="w-full border rounded-lg px-3 py-2 text-sm"
           />
         </div>
