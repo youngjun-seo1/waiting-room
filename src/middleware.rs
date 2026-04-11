@@ -16,10 +16,15 @@ pub async fn gate_handler(
 ) -> Response<Body> {
     let enabled = state.config.read().enabled;
     if !enabled {
-        return match forward_request(&state, req).await {
-            Ok(resp) => resp,
-            Err(status) => status.into_response().into(),
-        };
+        // __wr 경로는 admin/SSE 등 내부 경로이므로 통과
+        let path = req.uri().path();
+        if path.starts_with("/__wr") {
+            return match forward_request(&state, req).await {
+                Ok(resp) => resp,
+                Err(status) => status.into_response().into(),
+            };
+        }
+        return serve_closed_page();
     }
 
     let cookie_name = state.config.read().queue_cookie_name.clone();
@@ -61,6 +66,65 @@ pub async fn gate_handler(
             resp
         }
     }
+}
+
+fn serve_closed_page() -> Response<Body> {
+    let html = r#"<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>이벤트 안내</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .card {
+    background: white;
+    border-radius: 20px;
+    padding: 48px 40px;
+    max-width: 440px;
+    width: 90%;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+  }
+  .icon {
+    font-size: 56px;
+    margin-bottom: 20px;
+  }
+  h1 {
+    color: #1a1a2e;
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 12px;
+  }
+  p {
+    color: #6b7280;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">&#128337;</div>
+    <h1>현재 이벤트 참여 시간이 아닙니다</h1>
+    <p>이벤트 시작 시간에 다시 방문해 주세요.<br>감사합니다.</p>
+  </div>
+</body>
+</html>"#;
+
+    Response::builder()
+        .status(200)
+        .header("Content-Type", "text/html; charset=utf-8")
+        .body(Body::from(html))
+        .unwrap()
 }
 
 fn extract_session(
