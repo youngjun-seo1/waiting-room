@@ -179,13 +179,14 @@ origin_url = "http://my-origin:3000"
 **Admin API:**
 
 ```bash
-# 스케줄 등록
+# 스케줄 등록 (origin_url은 선택)
 curl -X POST -H "X-Api-Key: ..." -H "Content-Type: application/json" \
   -d '{
     "name": "쿠폰 이벤트",
     "start_at": "2026-04-15T10:00:00Z",
     "end_at": "2026-04-15T11:00:00Z",
-    "max_active_users": 100
+    "max_active_users": 100,
+    "origin_url": "http://event-server:3000"
   }' http://localhost:8080/__wr/admin/schedules
 
 # 스케줄 목록 조회
@@ -200,5 +201,8 @@ curl -X DELETE -H "X-Api-Key: ..." http://localhost:8080/__wr/admin/schedules/{i
 ```
 [pending]                [active]              [ended]
  대기실 OFF    start_at→  대기실 ON      end_at→  대기실 자동 OFF
- Origin 직접 접근         순차 입장 시작           트래픽 직통
+ 안내 페이지 표시         순차 입장 시작           대기열 flush + 종료 안내
 ```
+
+스케줄 종료 시 대기 중이던 사용자에게 SSE로 "이벤트가 종료되었습니다" 안내를 표시합니다.
+Redis 모드에서는 스케줄이 `wr:schedules`에 저장되어 멀티 서버 간 공유됩니다.

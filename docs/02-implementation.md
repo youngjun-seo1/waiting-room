@@ -178,29 +178,47 @@ gate_check의 조건 분기(`if active → touch, elif waiting → position, els
 
 **`src/scheduler.rs`**
 
-- `Schedule` 구조체: `id`, `name`, `start_at`, `end_at`, `max_active_users`, `phase`
+- `Schedule` 구조체: `id`, `name`, `start_at`, `end_at`, `max_active_users`, `origin_url`, `phase`
 - `SchedulePhase` enum: `Pending` → `Active` → `Ended`
 - `evaluate_schedules()`: 현재 시각 기준으로 phase 전환 판단, Active→Ended 전환 감지
 - `spawn_scheduler()`: 1초마다 스케줄 체크, `config.enabled` 자동 변경. 스케줄 종료 시 자동 disable
+
+**`src/schedule_store.rs`**
+
+- `load_schedules()`: Redis `HGETALL wr:schedules` → JSON 역직렬화 → phase 재계산. Redis 실패 시 로컬 캐시 폴백
+- `save_schedule()`: Redis `HSET wr:schedules <id> <json>` + 로컬 캐시 갱신
+- `remove_schedule()`: Redis `HDEL wr:schedules <id>` + 로컬 캐시 갱신
 
 ### 수정 파일
 
 | 파일 | 변경 |
 |------|------|
-| `state.rs` | `schedules: RwLock<Vec<Schedule>>` 필드 추가 |
-| `admin.rs` | 스케줄 CRUD 엔드포인트 추가 |
-| `main.rs` | `mod scheduler`, `spawn_scheduler()` 추가 |
+| `state.rs` | `schedules: RwLock<Vec<Schedule>>` 필드 추가 (로컬 캐시) |
+| `admin.rs` | 스케줄 CRUD → `schedule_store` 함수 사용 |
+| `scheduler.rs` | Redis 모드 시 `load_schedules()`로 공유 스케줄 로드 |
+| `middleware.rs` | disabled 시 "이벤트 참여 시간이 아닙니다" 페이지 반환 (`/__wr/*` 제외) |
+| `waiting.rs` | SSE "closed" 이벤트 전송 (스케줄 종료 시) |
+| `templates/waiting.html` | "closed" 이벤트 핸들링 → 종료 안내 화면 전환 |
+| `main.rs` | `mod scheduler`, `mod schedule_store`, `spawn_scheduler()` 추가 |
 | `Cargo.toml` | `chrono` 추가 |
 
 ### 스케줄 동작 메커니즘
 
 `start_at` 도달 시:
 - `config.enabled = true` 자동 전환
-- `max_active_users`를 스케줄에 설정된 값으로 적용
+- `max_active_users`와 `origin_url`을 스케줄에 설정된 값으로 적용
 - Gate 미들웨어와 Reaper가 정상 동작 → 대기열에서 순차 입장
 
 `end_at` 도달 시:
-- `config.enabled = false` 자동 전환 → 대기실 OFF, 트래픽 직통
+- `config.enabled = false` 자동 전환 → 대기실 OFF
+- 대기열 flush (모든 대기 세션 제거)
+- SSE "closed" 이벤트 전송 → 대기 페이지가 "이벤트가 종료되었습니다" 안내로 전환
+
+### 스케줄 영속화 (Redis)
+
+- Redis 모드: `wr:schedules` Hash에 저장 → 멀티 서버 간 스케줄 공유
+- In-memory 모드: 로컬 `Vec<Schedule>`에만 저장 (서버 재시작 시 소실)
+- Redis 장애 시: 마지막으로 동기화된 로컬 캐시로 폴백
 
 ### Admin API
 
@@ -211,7 +229,8 @@ curl -X POST -H "X-Api-Key: ..." -H "Content-Type: application/json" \
     "name": "쿠폰 이벤트",
     "start_at": "2026-04-15T10:00:00Z",
     "end_at": "2026-04-15T11:00:00Z",
-    "max_active_users": 100
+    "max_active_users": 100,
+    "origin_url": "http://event-server:3000"
   }' http://localhost:8080/__wr/admin/schedules
 
 # 스케줄 목록
@@ -285,14 +304,16 @@ npm run build     # 프로덕션 빌드 (dist/)
 
 ---
 
-## 5. 실행 방법
+## 7. 실행 방법
 
 ```bash
-# 오리진 서버 (테스트용)
-cargo run --example origin
+# 전체 서버 한 번에 시작 (Origin + Waiting Room + Admin SPA)
+./start.sh
 
-# In-memory 모드
-cargo run
+# 개별 실행
+cargo run --example origin   # 오리진 서버 (테스트용)
+cargo run                     # In-memory 모드
+cd admin && npm run dev       # Admin SPA
 
 # Redis 모드
 WR_REDIS_URL="redis://127.0.0.1:6379" cargo run
@@ -300,4 +321,8 @@ WR_REDIS_URL="redis://127.0.0.1:6379" cargo run
 # 멀티 서버
 WR_REDIS_URL="redis://127.0.0.1:6379" WR_LISTEN_ADDR="0.0.0.0:8080" cargo run
 WR_REDIS_URL="redis://127.0.0.1:6379" WR_LISTEN_ADDR="0.0.0.0:8081" cargo run
+
+# 서버 관리
+./stop.sh      # 전체 서버 종료
+./status.sh    # 서버 실행 상태 확인
 ```

@@ -68,6 +68,7 @@ waiting-room/
 │   ├── waiting.rs             # 대기 페이지 핸들러 + SSE
 │   ├── reaper.rs              # 세션 만료 + 자동 입장
 │   ├── scheduler.rs           # 이벤트 스케줄러 (시간 기반 자동 제어)
+│   ├── schedule_store.rs      # 스케줄 영속화 (Redis / in-memory)
 │   └── templates/
 │       └── waiting.html       # 대기 페이지 HTML
 ├── admin/                     # Admin SPA (React + TypeScript + Vite)
@@ -92,7 +93,8 @@ waiting-room/
     ├── 01-design.md           # 설계 문서 (이 파일)
     ├── 02-implementation.md   # 구현 문서
     ├── 03-testing.md          # 테스트 문서
-    └── 04-qna.md              # Q&A
+    ├── 04-qna.md              # Q&A
+    └── 05-comparison.md       # Cloudflare 비교 분석
 ```
 
 ---
@@ -121,6 +123,9 @@ pub trait QueueBackend: Send + Sync + 'static {
 ### 4.2 Gate Middleware Flow
 
 ```
+0. enabled 확인
+   → Disabled + /__wr/* 경로: 통과 (Admin API 등)
+   → Disabled + 일반 경로: "이벤트 참여 시간이 아닙니다" 페이지 반환
 1. 쿠키에서 세션 추출 (HMAC 검증)
 2. gate_check() 호출 (1 round-trip)
    → Active: last_seen 갱신 → 프록시
@@ -144,6 +149,7 @@ pub trait QueueBackend: Send + Sync + 'static {
 | ETA 통계 | `wr:stats` | Hash | `total_active_duration_ms`, `completed_sessions` |
 | Reaper 리더 락 | `wr:reaper:lock` | String+NX+EX | 단일 리더 보장 |
 | SSE 알림 | `wr:notify` | Pub/Sub | 큐 변경 시 전 서버 알림 |
+| 스케줄 | `wr:schedules` | Hash | field=schedule_id, value=JSON |
 
 ### 4.5 Lua 스크립트 (Redis 원자성 보장)
 
@@ -182,8 +188,9 @@ Reaper/Admin → PUBLISH wr:notify → Redis Pub/Sub
 
 **구현 방식:**
 - `scheduler.rs`: 1초마다 스케줄 목록을 확인, phase 전환 시 `config.enabled`를 자동 변경
-- Active phase: `config.enabled = true`, `max_active`를 스케줄에 설정된 값으로 적용 → 대기열에서 순차 입장
-- Ended phase: `config.enabled = false` 자동 전환 → 트래픽 직통
+- Active phase: `config.enabled = true`, `max_active`와 `origin_url`을 스케줄에 설정된 값으로 적용 → 대기열에서 순차 입장
+- Ended phase: `config.enabled = false` 자동 전환, 대기열 flush, SSE "closed" 이벤트 전송 → 대기 페이지가 종료 안내로 전환
+- `schedule_store.rs`: Redis 모드 시 `wr:schedules` Hash에 저장 → 멀티 서버 간 스케줄 공유. Redis 실패 시 로컬 캐시 폴백
 - Admin API 또는 Admin SPA에서 스케줄 CRUD 가능
 
 ### 4.9 Admin SPA
@@ -191,8 +198,8 @@ Reaper/Admin → PUBLISH wr:notify → Redis Pub/Sub
 React + TypeScript + Vite 기반 관리 대시보드. Waiting Room 서버와 독립적으로 실행.
 
 **주요 기능:**
-- **Dashboard**: 실시간 큐 상태 모니터링 (활성 사용자, 대기열 길이, 평균 활성 시간)
-- **Schedules**: 스케줄 등록/삭제, phase 실시간 표시
+- **Dashboard**: 실시간 큐 상태 모니터링 (활성 사용자, 대기열 길이, 평균 활성 시간) + 활성 스케줄 정보 표시
+- **Schedules**: 스케줄 등록/삭제, phase 실시간 표시 (name, start_at, end_at, max_active_users, origin_url)
 - **Settings**: 런타임 설정 변경 (max_active_users, session_ttl 등)
 - 2초 간격 폴링으로 상태 자동 갱신
 
@@ -212,12 +219,12 @@ npm run dev    # Vite dev server (http://localhost:5173)
 ```toml
 listen_addr = "0.0.0.0:8080"
 origin_url = "http://127.0.0.1:3000"
-max_active_users = 1000
+max_active_users = 100
 session_ttl_secs = 300
 queue_cookie_name = "__wr_token"
 admin_api_key = "change-me-in-production"
-enabled = true
-redis_url = ""  # 비어있으면 in-memory, "redis://..." 이면 Redis 모드
+enabled = false  # 기본 disabled, 스케줄 또는 Admin API로 활성화
+redis_url = ""   # 비어있으면 in-memory, "redis://..." 이면 Redis 모드
 ```
 
 ### 환경변수 오버라이드

@@ -256,9 +256,9 @@ curl -X POST -H "X-Api-Key: ..." -H "Content-Type: application/json" \
 
 | Phase | 시점 | 상태 | 사용자 접속 결과 | 검증 |
 |-------|------|------|-----------------|------|
-| `pending` | 등록 직후 | enabled=false | Origin 직접 접근 | OK |
+| `pending` | 등록 직후 | enabled=false | "이벤트 참여 시간이 아닙니다" 페이지 | OK |
 | `active` | start_at 도달 | enabled=true | 대기실 ON, 순차 입장 시작 | OK |
-| `ended` | end_at 도달 | enabled=false | 대기실 자동 OFF, 트래픽 직통 | OK |
+| `ended` | end_at 도달 | enabled=false | 대기열 flush, SSE "closed" 이벤트, 종료 안내 | OK |
 
 ### 7.3 Active phase 상세
 
@@ -277,7 +277,9 @@ start_at 도달 시:
 end_at 도달 시:
 - config.enabled = false 자동 전환 (대기실 OFF)
 - phase: "ended"
-- 모든 트래픽 Origin 직통
+- 대기열 flush (모든 대기 세션 제거)
+- SSE "closed" 이벤트 전송 → 대기 페이지가 "이벤트가 종료되었습니다" 안내로 전환
+- 새 접속 시 "이벤트 참여 시간이 아닙니다" 페이지 표시
 ```
 
 ### 7.5 운영 흐름 예시
