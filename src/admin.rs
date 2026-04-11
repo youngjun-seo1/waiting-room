@@ -35,7 +35,7 @@ async fn auth_middleware(
 }
 
 async fn get_config(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let config = state.config.read();
+    let config = &state.original_config;
     Json(serde_json::json!({
         "listen_addr": config.listen_addr.to_string(),
         "origin_url": config.origin_url,

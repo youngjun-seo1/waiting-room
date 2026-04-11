@@ -12,6 +12,7 @@ use crate::session::SessionManager;
 
 pub struct AppState {
     pub config: RwLock<Config>,
+    pub original_config: Config,
     pub queue: Arc<dyn QueueBackend>,
     pub session_mgr: SessionManager,
     pub sse_tx: broadcast::Sender<()>,
@@ -26,6 +27,7 @@ impl AppState {
         let secret = generate_hmac_secret();
         let (sse_tx, _) = broadcast::channel(128);
         Self {
+            original_config: config.clone(),
             config: RwLock::new(config),
             queue,
             session_mgr: SessionManager::new(&secret),

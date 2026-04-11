@@ -10,13 +10,6 @@ interface Status {
   total_admitted: number;
 }
 
-interface Config {
-  max_active_users: number;
-  session_ttl_secs: number;
-  origin_url: string;
-  redis_url: string;
-}
-
 interface ScheduleStats {
   peak_active_users: number;
   peak_queue_length: number;
@@ -52,21 +45,18 @@ function formatRange(startIso: string, endIso: string) {
 
 export function Dashboard() {
   const [status, setStatus] = useState<Status | null>(null);
-  const [config, setConfig] = useState<Config | null>(null);
-  const [activeSchedule, setActiveSchedule] = useState<Schedule | null>(null);
+const [activeSchedule, setActiveSchedule] = useState<Schedule | null>(null);
   const [lastEndedSchedule, setLastEndedSchedule] = useState<Schedule | null>(null);
   const [nextPendingSchedule, setNextPendingSchedule] = useState<Schedule | null>(null);
   const [error, setError] = useState('');
 
   const fetchAll = useCallback(async () => {
     try {
-      const [st, c, sch] = await Promise.all([
+      const [st, sch] = await Promise.all([
         api.getStatus(),
-        api.getConfig(),
         api.getSchedules(),
       ]);
       setStatus(st);
-      setConfig(c);
       const schedules: Schedule[] = sch.schedules || [];
       const active = schedules.find((s) => s.phase === 'active') || null;
       setActiveSchedule(active);
@@ -208,16 +198,6 @@ export function Dashboard() {
               </div>
             </div>
           )}
-        </div>
-      )}
-
-      {/* Config Info */}
-      {config && (
-        <div className="flex justify-center flex-wrap gap-x-4 gap-y-1">
-          <span className="text-xs text-gray-400">Max Active: {config.max_active_users}</span>
-          <span className="text-xs text-gray-400">TTL: {config.session_ttl_secs}s</span>
-          <span className="text-xs text-gray-400">Origin: {config.origin_url}</span>
-          <span className="text-xs text-gray-400">{config.redis_url ? `Redis: ${config.redis_url}` : 'In-Memory'}</span>
         </div>
       )}
     </div>
