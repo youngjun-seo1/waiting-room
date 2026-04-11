@@ -105,7 +105,7 @@ const [activeSchedule, setActiveSchedule] = useState<Schedule | null>(null);
         <LiveClock />
         <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${status?.enabled ? 'text-green-600' : 'text-gray-400'}`}>
           <span className={`w-1.5 h-1.5 rounded-full ${status?.enabled ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}`} />
-          {status?.enabled ? 'LIVE' : 'OFFLINE'}
+          {status?.enabled ? 'ON AIR' : 'STANDBY'}
         </span>
       </div>
 

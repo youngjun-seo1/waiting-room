@@ -290,7 +290,7 @@ export function QueueVisualizer({ stats, enabled }: { stats: Stats | null; enabl
     <div className="relative bg-white rounded-xl border border-gray-200 p-4">
       {!enabled && (
         <div className="absolute inset-0 flex items-center justify-center z-10 rounded-xl bg-white/70 backdrop-blur-sm">
-          <span className="text-lg font-semibold text-gray-400">Waiting Room Disabled</span>
+          <span className="text-lg font-semibold text-gray-400">Waiting Room on Standby</span>
         </div>
       )}
       <div className="flex items-center justify-between mb-2">
