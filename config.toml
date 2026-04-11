@@ -4,7 +4,7 @@ max_active_users = 100
 session_ttl_secs = 5
 queue_cookie_name = "__wr_token"
 admin_api_key = "change-me-in-production"
-enabled = true
+enabled = false
 redis_url = ""
 
 [branding]
