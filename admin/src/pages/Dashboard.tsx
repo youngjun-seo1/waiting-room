@@ -20,16 +20,37 @@ interface Config {
   redis_url: string;
 }
 
+interface Schedule {
+  id: string;
+  name: string;
+  start_at: string;
+  end_at: string;
+  max_active_users: number | null;
+  origin_url: string | null;
+  phase: string;
+}
+
+function formatTime(iso: string) {
+  return new Date(iso).toLocaleString();
+}
+
 export function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [config, setConfig] = useState<Config | null>(null);
+  const [activeSchedule, setActiveSchedule] = useState<Schedule | null>(null);
   const [error, setError] = useState('');
 
   const fetchAll = useCallback(async () => {
     try {
-      const [s, c] = await Promise.all([api.getStats(), api.getConfig()]);
+      const [s, c, sch] = await Promise.all([
+        api.getStats(),
+        api.getConfig(),
+        api.getSchedules(),
+      ]);
       setStats(s);
       setConfig(c);
+      const active = (sch.schedules || []).find((s: Schedule) => s.phase === 'active') || null;
+      setActiveSchedule(active);
       setError('');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Connection lost');
@@ -53,6 +74,28 @@ export function Dashboard() {
             maxActive={config.max_active_users}
             sessionTtl={config.session_ttl_secs}
           />
+
+          {activeSchedule && (
+            <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                  active
+                </span>
+                <span className="text-sm font-semibold text-indigo-900">{activeSchedule.name}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-indigo-700">
+                <span>Start: {formatTime(activeSchedule.start_at)}</span>
+                <span>End: {formatTime(activeSchedule.end_at)}</span>
+                {activeSchedule.max_active_users && (
+                  <span>Max Active: {activeSchedule.max_active_users}</span>
+                )}
+                {activeSchedule.origin_url && (
+                  <span>Origin: {activeSchedule.origin_url}</span>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="flex justify-center">
             <span className="text-xs text-gray-400">
               {config.redis_url ? `Redis: ${config.redis_url}` : 'In-Memory'} | Origin: {config.origin_url}
