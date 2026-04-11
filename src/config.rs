@@ -9,7 +9,6 @@ pub struct Config {
     pub session_ttl_secs: u64,
     pub queue_cookie_name: String,
     pub admin_api_key: String,
-    pub enabled: bool,
     #[serde(default)]
     pub redis_url: String,
     #[serde(default)]
@@ -77,9 +76,6 @@ impl Config {
         }
         if let Ok(v) = std::env::var("WR_ADMIN_API_KEY") {
             config.admin_api_key = v;
-        }
-        if let Ok(v) = std::env::var("WR_ENABLED") {
-            config.enabled = v.parse()?;
         }
         if let Ok(v) = std::env::var("WR_REDIS_URL") {
             config.redis_url = v;

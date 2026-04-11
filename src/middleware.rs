@@ -14,7 +14,7 @@ pub async fn gate_handler(
     State(state): State<Arc<AppState>>,
     req: axum::extract::Request,
 ) -> Response<Body> {
-    let enabled = state.config.read().enabled;
+    let enabled = state.is_enabled();
     if !enabled {
         // __wr 경로는 admin/SSE 등 내부 경로이므로 통과
         let path = req.uri().path();

@@ -36,13 +36,7 @@ async function request(path: string, options: RequestInit = {}) {
 
 export const api = {
   getConfig: () => request('/__wr/admin/config'),
-  updateConfig: (data: Record<string, unknown>) =>
-    request('/__wr/admin/config', { method: 'PUT', body: JSON.stringify(data) }),
-  getStats: () => request('/__wr/admin/stats'),
   getStatus: () => request('/__wr/status'),
-  enable: () => request('/__wr/admin/enable', { method: 'POST' }),
-  disable: () => request('/__wr/admin/disable', { method: 'POST' }),
-  flush: () => request('/__wr/admin/flush', { method: 'POST' }),
   getSchedules: () => request('/__wr/admin/schedules'),
   createSchedule: (data: Record<string, unknown>) =>
     request('/__wr/admin/schedules', { method: 'POST', body: JSON.stringify(data) }),

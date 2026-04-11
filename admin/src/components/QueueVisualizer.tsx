@@ -72,10 +72,7 @@ export function QueueVisualizer({ stats, enabled }: { stats: Stats | null; enabl
     const targetActive = scaleCount(stats.active_users, total);
 
     // Count current settled dots (not transitioning)
-    const queuedDots = dots.filter(d => d.state === 'queued' || d.state === 'entering');
-    const activeDots = dots.filter(d => d.state === 'active' || d.state === 'admitting');
-    const currentQueued = queuedDots.length;
-    const currentActive = activeDots.length;
+    const currentQueued = dots.filter(d => d.state === 'queued' || d.state === 'entering').length;
 
     // --- Adjust queued dots ---
     const queueDiff = targetQueued - currentQueued;

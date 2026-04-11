@@ -1,21 +1,18 @@
 import { useCallback, useState } from 'react';
 import { api } from '../api';
 import { usePolling } from '../hooks/usePolling';
-import { StatusBadge } from '../components/StatusBadge';
-import { Settings } from '../components/Settings';
 import { QueueVisualizer } from '../components/QueueVisualizer';
 
-interface Stats {
+interface Status {
+  enabled: boolean;
   active_users: number;
   queue_length: number;
-  avg_active_duration_secs: number;
   total_admitted: number;
 }
 
 interface Config {
   max_active_users: number;
   session_ttl_secs: number;
-  enabled: boolean;
   origin_url: string;
   redis_url: string;
 }
@@ -43,19 +40,19 @@ function formatTime(iso: string) {
 }
 
 export function Dashboard() {
-  const [stats, setStats] = useState<Stats | null>(null);
+  const [status, setStatus] = useState<Status | null>(null);
   const [config, setConfig] = useState<Config | null>(null);
   const [activeSchedule, setActiveSchedule] = useState<Schedule | null>(null);
   const [error, setError] = useState('');
 
   const fetchAll = useCallback(async () => {
     try {
-      const [s, c, sch] = await Promise.all([
-        api.getStats(),
+      const [st, c, sch] = await Promise.all([
+        api.getStatus(),
         api.getConfig(),
         api.getSchedules(),
       ]);
-      setStats(s);
+      setStatus(st);
       setConfig(c);
       const active = (sch.schedules || []).find((s: Schedule) => s.phase === 'active') || null;
       setActiveSchedule(active);
@@ -73,66 +70,59 @@ export function Dashboard() {
         <div className="bg-red-50 text-red-600 text-sm rounded-lg p-3">{error}</div>
       )}
 
-      <QueueVisualizer stats={stats} enabled={config?.enabled ?? false} />
+      <QueueVisualizer stats={status} enabled={status?.enabled ?? false} />
 
-      {config && (
-        <>
-          <StatusBadge
-            enabled={config.enabled}
-            maxActive={config.max_active_users}
-            sessionTtl={config.session_ttl_secs}
-          />
-
-          {activeSchedule && (
-            <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                  active
-                </span>
-                <span className="text-sm font-semibold text-indigo-900">{activeSchedule.name}</span>
+      {/* Active Schedule */}
+      {activeSchedule && (
+        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+              active
+            </span>
+            <span className="text-sm font-semibold text-indigo-900">{activeSchedule.name}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-indigo-700">
+            <span>Start: {formatTime(activeSchedule.start_at)}</span>
+            <span>End: {formatTime(activeSchedule.end_at)}</span>
+            {activeSchedule.max_active_users && (
+              <span>Max Active: {activeSchedule.max_active_users}</span>
+            )}
+            {activeSchedule.origin_url && (
+              <span>Origin: {activeSchedule.origin_url}</span>
+            )}
+          </div>
+          {activeSchedule.stats && (
+            <div className="grid grid-cols-4 gap-2 mt-3 pt-3 border-t border-indigo-200">
+              <div className="text-center">
+                <div className="text-lg font-bold text-indigo-900">{activeSchedule.stats.peak_active_users.toLocaleString()}</div>
+                <div className="text-[10px] text-indigo-500">Peak Active</div>
               </div>
-              <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-indigo-700">
-                <span>Start: {formatTime(activeSchedule.start_at)}</span>
-                <span>End: {formatTime(activeSchedule.end_at)}</span>
-                {activeSchedule.max_active_users && (
-                  <span>Max Active: {activeSchedule.max_active_users}</span>
-                )}
-                {activeSchedule.origin_url && (
-                  <span>Origin: {activeSchedule.origin_url}</span>
-                )}
+              <div className="text-center">
+                <div className="text-lg font-bold text-indigo-900">{activeSchedule.stats.peak_queue_length.toLocaleString()}</div>
+                <div className="text-[10px] text-indigo-500">Peak Queue</div>
               </div>
-              {activeSchedule.stats && (
-                <div className="grid grid-cols-4 gap-2 mt-3 pt-3 border-t border-indigo-200">
-                  <div className="text-center">
-                    <div className="text-lg font-bold text-indigo-900">{activeSchedule.stats.peak_active_users.toLocaleString()}</div>
-                    <div className="text-[10px] text-indigo-500">Peak Active</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-lg font-bold text-indigo-900">{activeSchedule.stats.peak_queue_length.toLocaleString()}</div>
-                    <div className="text-[10px] text-indigo-500">Peak Queue</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-lg font-bold text-indigo-900">{activeSchedule.stats.total_admitted.toLocaleString()}</div>
-                    <div className="text-[10px] text-indigo-500">Admitted</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-lg font-bold text-indigo-900">{activeSchedule.stats.total_visitors.toLocaleString()}</div>
-                    <div className="text-[10px] text-indigo-500">Visitors</div>
-                  </div>
-                </div>
-              )}
+              <div className="text-center">
+                <div className="text-lg font-bold text-indigo-900">{activeSchedule.stats.total_admitted.toLocaleString()}</div>
+                <div className="text-[10px] text-indigo-500">Admitted</div>
+              </div>
+              <div className="text-center">
+                <div className="text-lg font-bold text-indigo-900">{activeSchedule.stats.total_visitors.toLocaleString()}</div>
+                <div className="text-[10px] text-indigo-500">Visitors</div>
+              </div>
             </div>
           )}
-
-          <div className="flex justify-center">
-            <span className="text-xs text-gray-400">
-              {config.redis_url ? `Redis: ${config.redis_url}` : 'In-Memory'} | Origin: {config.origin_url}
-            </span>
-          </div>
-        </>
+        </div>
       )}
 
-      <Settings config={config} onRefresh={fetchAll} />
+      {/* Config Info */}
+      {config && (
+        <div className="flex justify-center flex-wrap gap-x-4 gap-y-1">
+          <span className="text-xs text-gray-400">Max Active: {config.max_active_users}</span>
+          <span className="text-xs text-gray-400">TTL: {config.session_ttl_secs}s</span>
+          <span className="text-xs text-gray-400">Origin: {config.origin_url}</span>
+          <span className="text-xs text-gray-400">{config.redis_url ? `Redis: ${config.redis_url}` : 'In-Memory'}</span>
+        </div>
+      )}
     </div>
   );
 }

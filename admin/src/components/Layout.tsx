@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { clearConnection, getConnection } from '../api';
 
 type Page = 'dashboard' | 'schedules';

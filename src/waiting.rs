@@ -143,7 +143,7 @@ pub async fn sse_handler(
                     action: None,
                 };
                 Some(Ok(Event::default().data(serde_json::to_string(&data).unwrap())))
-            } else if !state.config.read().enabled {
+            } else if !state.is_enabled() {
                 // Waiting room disabled (schedule ended) — notify client
                 let data = SseData {
                     position: 0,
@@ -165,12 +165,13 @@ pub async fn sse_handler(
 }
 
 pub async fn status_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let enabled = state.config.read().enabled;
+    let enabled = state.is_enabled();
     let stats = state.queue.stats().await;
     axum::Json(serde_json::json!({
         "enabled": enabled,
         "active_users": stats.active_count,
         "queue_length": stats.waiting_count,
+        "total_admitted": stats.total_admitted,
     }))
 }
 

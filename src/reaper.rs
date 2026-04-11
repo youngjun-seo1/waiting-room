@@ -13,7 +13,7 @@ pub fn spawn_reaper(state: Arc<AppState>) {
             let interval_secs = state.config.read().advanced.reaper_interval_secs;
             tokio::time::sleep(Duration::from_secs(interval_secs)).await;
 
-            let enabled = state.config.read().enabled;
+            let enabled = state.is_enabled();
             if !enabled {
                 continue;
             }

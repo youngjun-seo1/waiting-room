@@ -31,7 +31,7 @@ pub struct Schedule {
     #[serde(default)]
     pub origin_url: Option<String>,
     /// Current phase
-    #[serde(skip_deserializing)]
+    #[serde(default)]
     pub phase: SchedulePhase,
     /// Per-schedule statistics
     #[serde(default)]
@@ -147,20 +147,18 @@ pub fn spawn_scheduler(state: Arc<AppState>) {
                 evaluate_schedules(&mut schedules)
             };
 
-            // Apply schedule state to config (lock scoped to block)
-            {
+            // Apply schedule state
+            if let Some(_name) = &schedule_state.active_schedule {
+                state.set_enabled(true);
                 let mut config = state.config.write();
-                if let Some(_name) = &schedule_state.active_schedule {
-                    config.enabled = true;
-                    if let Some(max) = schedule_state.max_active_override {
-                        config.max_active_users = max;
-                    }
-                    if let Some(url) = &schedule_state.origin_url_override {
-                        config.origin_url = url.clone();
-                    }
-                } else if schedule_state.just_ended {
-                    config.enabled = false;
+                if let Some(max) = schedule_state.max_active_override {
+                    config.max_active_users = max;
                 }
+                if let Some(url) = &schedule_state.origin_url_override {
+                    config.origin_url = url.clone();
+                }
+            } else {
+                state.set_enabled(false);
             }
 
             // Flush queue on schedule start (clean slate)

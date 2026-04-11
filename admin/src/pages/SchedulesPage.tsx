@@ -45,6 +45,9 @@ export function SchedulesPage() {
   const [creating, setCreating] = useState(false);
   const [message, setMessage] = useState('');
 
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(3);
+
   const [name, setName] = useState('');
   const [startAt, setStartAt] = useState(nowLocal);
   const [endAt, setEndAt] = useState(nowLocal);
@@ -54,11 +57,16 @@ export function SchedulesPage() {
   const fetchSchedules = useCallback(async () => {
     try {
       const res = await api.getSchedules();
-      setSchedules(res.schedules || []);
+      const list: Schedule[] = res.schedules || [];
+      setSchedules(list);
+      setPage((p) => {
+        const maxPage = Math.max(1, Math.ceil(list.length / pageSize));
+        return p > maxPage ? maxPage : p;
+      });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load schedules');
     }
-  }, []);
+  }, [pageSize]);
 
   useEffect(() => {
     fetchSchedules();
@@ -137,46 +145,84 @@ export function SchedulesPage() {
         {schedules.length === 0 ? (
           <p className="text-sm text-gray-400">등록된 스케줄이 없습니다.</p>
         ) : (
-          <div className="space-y-3">
-            {schedules.map((s) => (
-              <div key={s.id} className="flex items-center justify-between border rounded-lg p-4">
-                <div className="text-left">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{s.name}</span>
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${phaseBadge[s.phase] || 'bg-gray-100'}`}>
-                      {s.phase}
-                    </span>
-                    {s.max_active_users && (
-                      <span className="text-xs text-gray-400">max: {s.max_active_users}</span>
+          <>
+            <div className="space-y-3">
+              {schedules.slice((page - 1) * pageSize, page * pageSize).map((s) => (
+                <div key={s.id} className="flex items-center justify-between border rounded-lg p-4">
+                  <div className="text-left">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{s.name}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${phaseBadge[s.phase] || 'bg-gray-100'}`}>
+                        {s.phase}
+                      </span>
+                      {s.max_active_users && (
+                        <span className="text-xs text-gray-400">max: {s.max_active_users}</span>
+                      )}
+                    </div>
+                    <div className="text-xs text-gray-400 mt-1 space-x-3">
+                      <span>Start: {formatTime(s.start_at)}</span>
+                      <span>End: {formatTime(s.end_at)}</span>
+                    </div>
+                    {s.origin_url && (
+                      <div className="text-xs text-gray-400 mt-0.5 truncate">
+                        Origin: {s.origin_url}
+                      </div>
+                    )}
+                    {s.stats && s.stats.total_admitted > 0 && (
+                      <div className="flex gap-4 text-xs text-gray-500 mt-1">
+                        <span>Peak Active: {s.stats.peak_active_users.toLocaleString()}</span>
+                        <span>Peak Queue: {s.stats.peak_queue_length.toLocaleString()}</span>
+                        <span>Admitted: {s.stats.total_admitted.toLocaleString()}</span>
+                        <span>Visitors: {s.stats.total_visitors.toLocaleString()}</span>
+                      </div>
                     )}
                   </div>
-                  <div className="text-xs text-gray-400 mt-1 space-x-3">
-                    <span>Start: {formatTime(s.start_at)}</span>
-                    <span>End: {formatTime(s.end_at)}</span>
-                  </div>
-                  {s.origin_url && (
-                    <div className="text-xs text-gray-400 mt-0.5 truncate">
-                      Origin: {s.origin_url}
-                    </div>
-                  )}
-                  {s.stats && s.stats.total_admitted > 0 && (
-                    <div className="flex gap-4 text-xs text-gray-500 mt-1">
-                      <span>Peak Active: {s.stats.peak_active_users.toLocaleString()}</span>
-                      <span>Peak Queue: {s.stats.peak_queue_length.toLocaleString()}</span>
-                      <span>Admitted: {s.stats.total_admitted.toLocaleString()}</span>
-                      <span>Visitors: {s.stats.total_visitors.toLocaleString()}</span>
-                    </div>
-                  )}
+                  <button
+                    onClick={() => handleDelete(s.id, s.name)}
+                    className="text-red-500 hover:text-red-700 text-sm px-3 py-1"
+                  >
+                    Delete
+                  </button>
                 </div>
-                <button
-                  onClick={() => handleDelete(s.id, s.name)}
-                  className="text-red-500 hover:text-red-700 text-sm px-3 py-1"
+              ))}
+            </div>
+
+            {/* Pagination */}
+            <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <span>Rows</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                  className="border border-gray-300 rounded px-2 py-1 text-sm"
                 >
-                  Delete
+                  <option value={3}>3</option>
+                  <option value={10}>10</option>
+                  <option value={100}>100</option>
+                </select>
+                <span className="text-gray-400">Total {schedules.length}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="px-3 py-1 text-sm rounded border border-gray-300 disabled:opacity-30 hover:bg-gray-50"
+                >
+                  Prev
+                </button>
+                <span className="px-3 py-1 text-sm text-gray-600">
+                  {page} / {Math.max(1, Math.ceil(schedules.length / pageSize))}
+                </span>
+                <button
+                  onClick={() => setPage((p) => Math.min(Math.ceil(schedules.length / pageSize), p + 1))}
+                  disabled={page >= Math.ceil(schedules.length / pageSize)}
+                  className="px-3 py-1 text-sm rounded border border-gray-300 disabled:opacity-30 hover:bg-gray-50"
+                >
+                  Next
                 </button>
               </div>
-            ))}
-          </div>
+            </div>
+          </>
         )}
       </div>
 

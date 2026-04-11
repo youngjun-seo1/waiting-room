@@ -1,6 +1,7 @@
 use deadpool_redis::{Pool, redis::cmd};
 use parking_lot::RwLock;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::broadcast;
 
 use crate::backend::QueueBackend;
@@ -17,6 +18,7 @@ pub struct AppState {
     pub http_client: HttpClient,
     pub redis_pool: Option<Pool>,
     pub schedules: RwLock<Vec<Schedule>>,
+    pub enabled: AtomicBool,
 }
 
 impl AppState {
@@ -31,7 +33,16 @@ impl AppState {
             http_client: create_http_client(),
             redis_pool,
             schedules: RwLock::new(Vec::new()),
+            enabled: AtomicBool::new(false),
         }
+    }
+
+    pub fn is_enabled(&self) -> bool {
+        self.enabled.load(Ordering::Relaxed)
+    }
+
+    pub fn set_enabled(&self, val: bool) {
+        self.enabled.store(val, Ordering::Relaxed);
     }
 
     pub fn notify_queue_update(&self) {

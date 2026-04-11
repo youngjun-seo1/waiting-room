@@ -3,19 +3,14 @@ use axum::extract::{Path, State};
 use axum::http::{Request, StatusCode};
 use axum::middleware::Next;
 use axum::response::IntoResponse;
-use axum::{Json, Router, routing::{delete, get, post}};
-use serde::Deserialize;
+use axum::{Json, Router, routing::{delete, get}};
 use std::sync::Arc;
 use crate::scheduler::{CreateScheduleRequest, Schedule};
 use crate::state::AppState;
 
 pub fn admin_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
     Router::new()
-        .route("/config", get(get_config).put(update_config))
-        .route("/enable", post(enable))
-        .route("/disable", post(disable))
-        .route("/stats", get(stats))
-        .route("/flush", post(flush))
+        .route("/config", get(get_config))
         .route("/schedules", get(list_schedules).post(create_schedule))
         .route("/schedules/{id}", delete(delete_schedule))
         .layer(axum::middleware::from_fn_with_state(state, auth_middleware))
@@ -47,68 +42,13 @@ async fn get_config(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         "max_active_users": config.max_active_users,
         "session_ttl_secs": config.session_ttl_secs,
         "queue_cookie_name": config.queue_cookie_name,
-        "enabled": config.enabled,
+        "enabled": state.is_enabled(),
         "redis_url": config.redis_url,
         "branding": {
             "page_title": config.branding.page_title,
             "logo_url": config.branding.logo_url,
         },
     }))
-}
-
-#[derive(Deserialize)]
-struct ConfigUpdate {
-    max_active_users: Option<u32>,
-    session_ttl_secs: Option<u64>,
-    page_title: Option<String>,
-    logo_url: Option<String>,
-}
-
-async fn update_config(
-    State(state): State<Arc<AppState>>,
-    Json(update): Json<ConfigUpdate>,
-) -> impl IntoResponse {
-    let mut config = state.config.write();
-    if let Some(v) = update.max_active_users {
-        config.max_active_users = v;
-    }
-    if let Some(v) = update.session_ttl_secs {
-        config.session_ttl_secs = v;
-    }
-    if let Some(v) = update.page_title {
-        config.branding.page_title = v;
-    }
-    if let Some(v) = update.logo_url {
-        config.branding.logo_url = v;
-    }
-    Json(serde_json::json!({"status": "updated"}))
-}
-
-async fn enable(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    state.config.write().enabled = true;
-    Json(serde_json::json!({"enabled": true}))
-}
-
-async fn disable(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    state.config.write().enabled = false;
-    state.queue.flush().await;
-    Json(serde_json::json!({"enabled": false}))
-}
-
-async fn stats(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let s = state.queue.stats().await;
-    Json(serde_json::json!({
-        "active_users": s.active_count,
-        "queue_length": s.waiting_count,
-        "avg_active_duration_secs": s.avg_active_duration_secs,
-        "total_admitted": s.total_admitted,
-    }))
-}
-
-async fn flush(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    state.queue.flush().await;
-    state.notify_queue_update();
-    Json(serde_json::json!({"status": "flushed"}))
 }
 
 // --- Schedule endpoints ---
