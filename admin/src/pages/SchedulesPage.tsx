@@ -319,7 +319,7 @@ export function SchedulesPage() {
             type="text"
             value={originUrl}
             onChange={(e) => setOriginUrl(e.target.value)}
-            placeholder="http://127.0.0.1:3000 (미입력 시 기본 Origin 사용)"
+            placeholder="http://localhost:3000 (미입력 시 기본 Origin 사용)"
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
           />
         </div>
