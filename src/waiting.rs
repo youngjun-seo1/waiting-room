@@ -143,6 +143,16 @@ pub async fn sse_handler(
                     action: None,
                 };
                 Some(Ok(Event::default().data(serde_json::to_string(&data).unwrap())))
+            } else if !state.config.read().enabled {
+                // Waiting room disabled (schedule ended) — notify client
+                let data = SseData {
+                    position: 0,
+                    total_waiting: 0,
+                    eta_seconds: 0.0,
+                    progress_pct: 0.0,
+                    action: Some("closed".to_string()),
+                };
+                Some(Ok(Event::default().data(serde_json::to_string(&data).unwrap())))
             } else {
                 None
             }

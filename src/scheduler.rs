@@ -125,21 +125,27 @@ pub fn spawn_scheduler(state: Arc<AppState>) {
                 evaluate_schedules(&mut schedules)
             };
 
-            // Apply schedule state to config
-            let mut config = state.config.write();
+            // Apply schedule state to config (lock scoped to block)
+            {
+                let mut config = state.config.write();
+                if let Some(_name) = &schedule_state.active_schedule {
+                    config.enabled = true;
+                    if let Some(max) = schedule_state.max_active_override {
+                        config.max_active_users = max;
+                    }
+                    if let Some(url) = &schedule_state.origin_url_override {
+                        config.origin_url = url.clone();
+                    }
+                } else if schedule_state.just_ended {
+                    config.enabled = false;
+                }
+            }
 
-            if let Some(_name) = &schedule_state.active_schedule {
-                // A schedule is active — override config
-                config.enabled = true;
-                if let Some(max) = schedule_state.max_active_override {
-                    config.max_active_users = max;
-                }
-                if let Some(url) = &schedule_state.origin_url_override {
-                    config.origin_url = url.clone();
-                }
-            } else if schedule_state.just_ended {
-                // Schedule just ended with no other active schedule — disable
-                config.enabled = false;
+            // After lock released: flush queue on schedule end
+            if schedule_state.just_ended && schedule_state.active_schedule.is_none() {
+                state.queue.flush().await;
+                state.notify_queue_update();
+                info!("schedule ended: queue flushed, clients notified");
             }
         }
     });
