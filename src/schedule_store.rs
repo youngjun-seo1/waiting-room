@@ -76,6 +76,30 @@ pub async fn save_schedule(state: &AppState, schedule: &Schedule) {
     state.schedules.write().push(schedule.clone());
 }
 
+/// Persist all schedules to Redis (for stats updates).
+pub async fn save_all_schedules(state: &AppState) {
+    if let Some(pool) = &state.redis_pool {
+        let schedules = state.schedules.read().clone();
+        match pool.get().await {
+            Ok(mut conn) => {
+                for schedule in &schedules {
+                    if let Ok(json) = serde_json::to_string(schedule) {
+                        let _: Result<(), _> = cmd("HSET")
+                            .arg("wr:schedules")
+                            .arg(&schedule.id)
+                            .arg(&json)
+                            .query_async(&mut *conn)
+                            .await;
+                    }
+                }
+            }
+            Err(e) => {
+                warn!("Redis connection failed for save_all_schedules: {e}");
+            }
+        }
+    }
+}
+
 /// Remove a schedule by ID. Returns true if found.
 pub async fn remove_schedule(state: &AppState, id: &str) -> bool {
     let mut removed = false;

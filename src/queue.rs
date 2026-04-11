@@ -36,6 +36,7 @@ pub struct WaitingQueue {
     total_active_duration_secs: f64,
     completed_sessions: u64,
     total_admitted: u64,
+    total_visitors: u64,
 }
 
 pub struct QueuePosition {
@@ -49,6 +50,7 @@ pub struct QueueStats {
     pub waiting_count: usize,
     pub avg_active_duration_secs: f64,
     pub total_admitted: u64,
+    pub total_visitors: u64,
 }
 
 impl WaitingQueue {
@@ -62,6 +64,7 @@ impl WaitingQueue {
             total_active_duration_secs: 0.0,
             completed_sessions: 0,
             total_admitted: 0,
+            total_visitors: 0,
         }
     }
 
@@ -100,6 +103,11 @@ impl WaitingQueue {
             },
         );
         self.total_admitted += 1;
+    }
+
+    /// Record a new visitor (call when a new session first enters the system)
+    pub fn record_visitor(&mut self) {
+        self.total_visitors += 1;
     }
 
     pub fn enqueue(&mut self, id: SessionId) {
@@ -194,6 +202,7 @@ impl WaitingQueue {
                 0.0
             },
             total_admitted: self.total_admitted,
+            total_visitors: self.total_visitors,
         }
     }
 
@@ -205,6 +214,7 @@ impl WaitingQueue {
         self.total_active_duration_secs = 0.0;
         self.completed_sessions = 0;
         self.total_admitted = 0;
+        self.total_visitors = 0;
     }
 }
 

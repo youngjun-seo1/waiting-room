@@ -20,6 +20,13 @@ interface Config {
   redis_url: string;
 }
 
+interface ScheduleStats {
+  peak_active_users: number;
+  peak_queue_length: number;
+  total_admitted: number;
+  total_visitors: number;
+}
+
 interface Schedule {
   id: string;
   name: string;
@@ -28,6 +35,7 @@ interface Schedule {
   max_active_users: number | null;
   origin_url: string | null;
   phase: string;
+  stats?: ScheduleStats;
 }
 
 function formatTime(iso: string) {
@@ -93,6 +101,26 @@ export function Dashboard() {
                   <span>Origin: {activeSchedule.origin_url}</span>
                 )}
               </div>
+              {activeSchedule.stats && (
+                <div className="grid grid-cols-4 gap-2 mt-3 pt-3 border-t border-indigo-200">
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-indigo-900">{activeSchedule.stats.peak_active_users.toLocaleString()}</div>
+                    <div className="text-[10px] text-indigo-500">Peak Active</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-indigo-900">{activeSchedule.stats.peak_queue_length.toLocaleString()}</div>
+                    <div className="text-[10px] text-indigo-500">Peak Queue</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-indigo-900">{activeSchedule.stats.total_admitted.toLocaleString()}</div>
+                    <div className="text-[10px] text-indigo-500">Admitted</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-indigo-900">{activeSchedule.stats.total_visitors.toLocaleString()}</div>
+                    <div className="text-[10px] text-indigo-500">Visitors</div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

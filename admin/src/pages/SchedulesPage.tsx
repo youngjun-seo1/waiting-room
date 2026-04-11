@@ -1,6 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
 
+interface ScheduleStats {
+  peak_active_users: number;
+  peak_queue_length: number;
+  total_admitted: number;
+  total_visitors: number;
+}
+
 interface Schedule {
   id: string;
   name: string;
@@ -9,6 +16,7 @@ interface Schedule {
   max_active_users: number | null;
   origin_url: string | null;
   phase: string;
+  stats?: ScheduleStats;
 }
 
 const phaseBadge: Record<string, string> = {
@@ -149,6 +157,14 @@ export function SchedulesPage() {
                   {s.origin_url && (
                     <div className="text-xs text-gray-400 mt-0.5 truncate">
                       Origin: {s.origin_url}
+                    </div>
+                  )}
+                  {s.stats && s.stats.total_admitted > 0 && (
+                    <div className="flex gap-4 text-xs text-gray-500 mt-1">
+                      <span>Peak Active: {s.stats.peak_active_users.toLocaleString()}</span>
+                      <span>Peak Queue: {s.stats.peak_queue_length.toLocaleString()}</span>
+                      <span>Admitted: {s.stats.total_admitted.toLocaleString()}</span>
+                      <span>Visitors: {s.stats.total_visitors.toLocaleString()}</span>
                     </div>
                   )}
                 </div>

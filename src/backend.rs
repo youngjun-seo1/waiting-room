@@ -75,6 +75,7 @@ impl QueueBackend for MemoryBackend {
             }
             // Not found — try admit or enqueue (write lock)
             let mut q = self.queue.write();
+            q.record_visitor();
             if (q.active_count() as u32) < max_active {
                 q.admit(id);
                 GateResult::Admitted
@@ -89,6 +90,7 @@ impl QueueBackend for MemoryBackend {
         } else {
             // New session
             let mut q = self.queue.write();
+            q.record_visitor();
             if (q.active_count() as u32) < max_active {
                 q.admit(new_id);
                 GateResult::Admitted

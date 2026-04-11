@@ -77,10 +77,12 @@ if id == '' then
 end
 
 -- Try admit or enqueue
+redis.call('HINCRBY', 'wr:stats', 'total_visitors', 1)
 local count = redis.call('HLEN', 'wr:active')
 if count < max_active then
     redis.call('HSET', 'wr:active', use_id, now_ms)
     redis.call('SET', 'wr:active:' .. use_id .. ':ls', '1', 'EX', ttl_secs)
+    redis.call('HINCRBY', 'wr:stats', 'total_admitted', 1)
     return {'admitted', '0', '0'}
 else
     redis.call('ZADD', 'wr:waiting', now_ms, use_id)
@@ -120,6 +122,10 @@ if slots > 0 then
         redis.call('SET', 'wr:active:' .. id .. ':ls', '1', 'EX', ttl_secs)
         admitted = admitted + 1
     end
+end
+
+if admitted > 0 then
+    redis.call('HINCRBY', 'wr:stats', 'total_admitted', admitted)
 end
 
 return {expired, admitted}
@@ -263,6 +269,7 @@ impl QueueBackend for RedisBackend {
                     waiting_count: 0,
                     avg_active_duration_secs: 0.0,
                     total_admitted: 0,
+                    total_visitors: 0,
                 };
             }
         };
@@ -287,6 +294,7 @@ impl QueueBackend for RedisBackend {
         let mut total_duration_ms: f64 = 0.0;
         let mut completed: u64 = 0;
         let mut total_admitted: u64 = 0;
+        let mut total_visitors: u64 = 0;
         for i in (0..stats_raw.len()).step_by(2) {
             if i + 1 < stats_raw.len() {
                 match stats_raw[i].as_str() {
@@ -298,6 +306,9 @@ impl QueueBackend for RedisBackend {
                     }
                     "total_admitted" => {
                         total_admitted = stats_raw[i + 1].parse().unwrap_or(0);
+                    }
+                    "total_visitors" => {
+                        total_visitors = stats_raw[i + 1].parse().unwrap_or(0);
                     }
                     _ => {}
                 }
@@ -313,6 +324,7 @@ impl QueueBackend for RedisBackend {
                 0.0
             },
             total_admitted,
+            total_visitors,
         }
     }
 
