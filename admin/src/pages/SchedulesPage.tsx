@@ -7,6 +7,7 @@ interface Schedule {
   start_at: string;
   end_at: string;
   max_active_users: number | null;
+  origin_url: string | null;
   phase: string;
 }
 
@@ -40,6 +41,7 @@ export function SchedulesPage() {
   const [startAt, setStartAt] = useState(nowLocal);
   const [endAt, setEndAt] = useState(nowLocal);
   const [maxActive, setMaxActive] = useState('100');
+  const [originUrl, setOriginUrl] = useState('');
 
   const fetchSchedules = useCallback(async () => {
     try {
@@ -82,12 +84,14 @@ export function SchedulesPage() {
         end_at: endIso,
       };
       if (maxActive) data.max_active_users = parseInt(maxActive);
+      if (originUrl.trim()) data.origin_url = originUrl.trim();
       await api.createSchedule(data);
 
       setName('');
       setStartAt(nowLocal());
       setEndAt(nowLocal());
       setMaxActive('100');
+      setOriginUrl('');
       setMessage('스케줄이 등록되었습니다.');
       setTimeout(() => setMessage(''), 3000);
       fetchSchedules();
@@ -141,6 +145,7 @@ export function SchedulesPage() {
                   <div className="text-xs text-gray-400 mt-1 space-x-3">
                     <span>Start: {formatTime(s.start_at)}</span>
                     <span>End: {formatTime(s.end_at)}</span>
+                    {s.origin_url && <span>Origin: {s.origin_url}</span>}
                   </div>
                 </div>
                 <button
@@ -180,6 +185,17 @@ export function SchedulesPage() {
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
             />
           </div>
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-sm text-gray-600 mb-1">Origin URL</label>
+          <input
+            type="text"
+            value={originUrl}
+            onChange={(e) => setOriginUrl(e.target.value)}
+            placeholder="http://127.0.0.1:3000 (미입력 시 기본 Origin 사용)"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+          />
         </div>
 
         <div className="grid grid-cols-2 gap-4 mb-4">

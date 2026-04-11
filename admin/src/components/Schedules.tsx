@@ -7,6 +7,7 @@ interface Schedule {
   start_at: string;
   end_at: string;
   max_active_users: number | null;
+  origin_url: string | null;
   phase: string;
 }
 
@@ -46,7 +47,7 @@ const ScheduleList = memo(function ScheduleList({
               )}
             </div>
             <div className="text-xs text-gray-400 mt-1">
-              Start: {formatTime(s.start_at)} / End: {formatTime(s.end_at)}
+              Start: {formatTime(s.start_at)} / End: {formatTime(s.end_at)}{s.origin_url && ` / Origin: ${s.origin_url}`}
             </div>
           </div>
           <button

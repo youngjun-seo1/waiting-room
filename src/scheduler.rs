@@ -19,6 +19,9 @@ pub struct Schedule {
     /// Override max_active_users for this schedule
     #[serde(default)]
     pub max_active_users: Option<u32>,
+    /// Override origin_url for this schedule
+    #[serde(default)]
+    pub origin_url: Option<String>,
     /// Current phase
     #[serde(skip_deserializing)]
     pub phase: SchedulePhase,
@@ -39,6 +42,7 @@ pub struct CreateScheduleRequest {
     pub start_at: DateTime<Utc>,
     pub end_at: DateTime<Utc>,
     pub max_active_users: Option<u32>,
+    pub origin_url: Option<String>,
 }
 
 impl Schedule {
@@ -49,6 +53,7 @@ impl Schedule {
             start_at: req.start_at,
             end_at: req.end_at,
             max_active_users: req.max_active_users,
+            origin_url: req.origin_url,
             phase: SchedulePhase::Pending,
         }
     }
@@ -58,6 +63,7 @@ impl Schedule {
 pub struct ScheduleState {
     pub enabled: bool,
     pub max_active_override: Option<u32>,
+    pub origin_url_override: Option<String>,
     pub active_schedule: Option<String>, // schedule name
     /// A schedule just transitioned from Active to Ended
     pub just_ended: bool,
@@ -68,6 +74,7 @@ pub fn evaluate_schedules(schedules: &mut Vec<Schedule>) -> ScheduleState {
     let mut result = ScheduleState {
         enabled: false,
         max_active_override: None,
+        origin_url_override: None,
         active_schedule: None,
         just_ended: false,
     };
@@ -92,6 +99,7 @@ pub fn evaluate_schedules(schedules: &mut Vec<Schedule>) -> ScheduleState {
             }
             result.enabled = true;
             result.max_active_override = schedule.max_active_users;
+            result.origin_url_override = schedule.origin_url.clone();
             result.active_schedule = Some(schedule.name.clone());
             return result;
         }
@@ -120,6 +128,9 @@ pub fn spawn_scheduler(state: Arc<AppState>) {
                 config.enabled = true;
                 if let Some(max) = schedule_state.max_active_override {
                     config.max_active_users = max;
+                }
+                if let Some(url) = &schedule_state.origin_url_override {
+                    config.origin_url = url.clone();
                 }
             } else if schedule_state.just_ended {
                 // Schedule just ended with no other active schedule — disable
