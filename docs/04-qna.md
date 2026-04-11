@@ -169,31 +169,22 @@ origin_url = "http://my-origin:3000"
 
 ## Q12. 쿠폰 선착순처럼 특정 시간에 오픈해야 한다면 어떻게 운영해야 하지?
 
-스케줄 기능으로 자동화:
+스케줄 기능으로 자동화. Admin SPA 또는 Admin API로 등록:
 
-```toml
-[[schedule]]
-name = "쿠폰 이벤트"
-enable_at = "2026-04-15T09:50:00+09:00"   # 대기실 오픈 (대기열 수집)
-start_at = "2026-04-15T10:00:00+09:00"    # 실제 입장 시작
-disable_at = "2026-04-15T11:00:00+09:00"  # 대기실 종료
-max_active_users = 100
-```
+**Admin SPA:**
+1. Schedules 페이지에서 Name, Start At, End At, Max Active Users 입력
+2. Create Schedule 버튼 클릭
+3. 스케줄이 자동으로 start_at에 대기실 ON, end_at에 대기실 OFF
 
-- `enable_at`: 대기 페이지 노출 시작, 사용자가 대기열에 쌓임
-- `start_at`: 대기열에서 순차 입장 시작
-- `disable_at`: 이벤트 종료, 모든 트래픽 Origin 직통
-
-Admin API로 등록:
+**Admin API:**
 
 ```bash
 # 스케줄 등록
 curl -X POST -H "X-Api-Key: ..." -H "Content-Type: application/json" \
   -d '{
     "name": "쿠폰 이벤트",
-    "enable_at": "2026-04-15T09:50:00Z",
     "start_at": "2026-04-15T10:00:00Z",
-    "disable_at": "2026-04-15T11:00:00Z",
+    "end_at": "2026-04-15T11:00:00Z",
     "max_active_users": 100
   }' http://localhost:8080/__wr/admin/schedules
 
@@ -204,10 +195,10 @@ curl -H "X-Api-Key: ..." http://localhost:8080/__wr/admin/schedules
 curl -X DELETE -H "X-Api-Key: ..." http://localhost:8080/__wr/admin/schedules/{id}
 ```
 
-**3단계 라이프사이클 (구현 완료, 테스트 검증됨):**
+**2단계 라이프사이클:**
 
 ```
-[pending]                    [queuing]                [active]              [ended]
- 대기실 OFF         enable_at→ 대기실 ON       start_at→ 입장 시작    disable_at→ 대기실 OFF
- Origin 직접 접근              전원 대기열 수집          선착순 순차 입장          트래픽 직통
+[pending]                [active]              [ended]
+ 대기실 OFF    start_at→  대기실 ON      end_at→  대기실 자동 OFF
+ Origin 직접 접근         순차 입장 시작           트래픽 직통
 ```

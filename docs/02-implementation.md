@@ -178,32 +178,29 @@ gate_check의 조건 분기(`if active → touch, elif waiting → position, els
 
 **`src/scheduler.rs`**
 
-- `Schedule` 구조체: `id`, `name`, `enable_at`, `start_at`, `disable_at`, `max_active_users`, `phase`
-- `SchedulePhase` enum: `Pending` → `Queuing` → `Active` → `Ended`
-- `evaluate_schedules()`: 현재 시각 기준으로 phase 전환 판단
-- `spawn_scheduler()`: 1초마다 스케줄 체크, `config.enabled` / `config.schedule_started` 자동 변경
+- `Schedule` 구조체: `id`, `name`, `start_at`, `end_at`, `max_active_users`, `phase`
+- `SchedulePhase` enum: `Pending` → `Active` → `Ended`
+- `evaluate_schedules()`: 현재 시각 기준으로 phase 전환 판단, Active→Ended 전환 감지
+- `spawn_scheduler()`: 1초마다 스케줄 체크, `config.enabled` 자동 변경. 스케줄 종료 시 자동 disable
 
 ### 수정 파일
 
 | 파일 | 변경 |
 |------|------|
-| `config.rs` | `schedule_started: bool` 필드 추가 (기본값 true) |
 | `state.rs` | `schedules: RwLock<Vec<Schedule>>` 필드 추가 |
-| `middleware.rs` | `schedule_started`가 false면 `max_active`를 0으로 (전원 대기열) |
-| `reaper.rs` | `schedule_started`가 false면 입장 차단 (만료만 처리) |
 | `admin.rs` | 스케줄 CRUD 엔드포인트 추가 |
 | `main.rs` | `mod scheduler`, `spawn_scheduler()` 추가 |
 | `Cargo.toml` | `chrono` 추가 |
 
-### Queuing phase 핵심 메커니즘
+### 스케줄 동작 메커니즘
 
-`schedule_started = false`일 때:
-- Gate 미들웨어: `effective_max = 0` → 모든 새 요청이 대기열로
-- Reaper: `effective_max = 0` → 만료만 처리, 대기열에서 입장시키지 않음
+`start_at` 도달 시:
+- `config.enabled = true` 자동 전환
+- `max_active_users`를 스케줄에 설정된 값으로 적용
+- Gate 미들웨어와 Reaper가 정상 동작 → 대기열에서 순차 입장
 
-`schedule_started = true`로 전환되면:
-- Gate 미들웨어: `effective_max = max_active_users` → 정상 입장
-- Reaper: 대기열에서 순차 입장 시작
+`end_at` 도달 시:
+- `config.enabled = false` 자동 전환 → 대기실 OFF, 트래픽 직통
 
 ### Admin API
 
@@ -212,9 +209,8 @@ gate_check의 조건 분기(`if active → touch, elif waiting → position, els
 curl -X POST -H "X-Api-Key: ..." -H "Content-Type: application/json" \
   -d '{
     "name": "쿠폰 이벤트",
-    "enable_at": "2026-04-15T09:50:00Z",
     "start_at": "2026-04-15T10:00:00Z",
-    "disable_at": "2026-04-15T11:00:00Z",
+    "end_at": "2026-04-15T11:00:00Z",
     "max_active_users": 100
   }' http://localhost:8080/__wr/admin/schedules
 
@@ -223,6 +219,44 @@ curl -H "X-Api-Key: ..." http://localhost:8080/__wr/admin/schedules
 
 # 스케줄 삭제
 curl -X DELETE -H "X-Api-Key: ..." http://localhost:8080/__wr/admin/schedules/{id}
+```
+
+## 5. Admin SPA 구현
+
+### 개요
+
+React + TypeScript + Vite 기반 관리 대시보드. Waiting Room 서버의 Admin API를 호출하여 상태 모니터링 및 설정 변경.
+
+### 기술 스택
+
+- **React 19** + **TypeScript**
+- **Vite** (빌드/개발 서버)
+- **Tailwind CSS** (스타일링)
+
+### 주요 페이지
+
+| 페이지 | 경로 | 기능 |
+|--------|------|------|
+| Login | `/` | API Key 입력, localStorage 저장 |
+| Dashboard | `/dashboard` | 실시간 큐 상태, 설정 변경, enable/disable 토글 |
+| Schedules | `/schedules` | 스케줄 등록/삭제, phase 실시간 표시 |
+
+### 주요 컴포넌트
+
+| 컴포넌트 | 역할 |
+|---------|------|
+| `QueueVisualizer` | 활성 사용자/대기열 시각화 (애니메이션) |
+| `StatusBadge` | Enabled/Disabled 상태 + Max Active + TTL 표시 |
+| `Settings` | max_active_users, session_ttl 런타임 변경 |
+| `Schedules` | 스케줄 목록 + 인라인 등록 폼 |
+
+### 실행
+
+```bash
+cd admin
+npm install
+npm run dev       # 개발 서버 (http://localhost:5173)
+npm run build     # 프로덕션 빌드 (dist/)
 ```
 
 ---

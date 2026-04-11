@@ -236,7 +236,7 @@ S0: a=10 q=9990  S1: a=10 q=9990  S2: a=10 q=9990  S3: a=10 q=9990
 
 ### 7.1 테스트 시나리오
 
-10초 후 대기열 수집, 30초 후 입장 시작, 120초 후 종료 스케줄을 등록하여 전체 라이프사이클 검증.
+스케줄을 등록하여 start_at → end_at 라이프사이클 검증.
 
 ```bash
 # 대기실 비활성화 (스케줄이 제어)
@@ -246,10 +246,9 @@ curl -X POST -H "X-Api-Key: ..." http://localhost:8080/__wr/admin/disable
 curl -X POST -H "X-Api-Key: ..." -H "Content-Type: application/json" \
   -d '{
     "name": "쿠폰 이벤트",
-    "enable_at": "2026-04-10T06:30:26Z",
-    "start_at": "2026-04-10T06:30:46Z",
-    "disable_at": "2026-04-10T06:32:16Z",
-    "max_active_users": 1
+    "start_at": "2026-04-10T06:30:26Z",
+    "end_at": "2026-04-10T06:32:16Z",
+    "max_active_users": 100
   }' http://localhost:8080/__wr/admin/schedules
 ```
 
@@ -257,42 +256,33 @@ curl -X POST -H "X-Api-Key: ..." -H "Content-Type: application/json" \
 
 | Phase | 시점 | 상태 | 사용자 접속 결과 | 검증 |
 |-------|------|------|-----------------|------|
-| `pending` | 등록 직후 | enabled=false | "티켓 구매" (Origin 직접) | OK |
-| `queuing` | enable_at 도달 | enabled=true, started=false | "Please wait..." (전원 대기열) | OK |
-| `active` | start_at 도달 | enabled=true, started=true | 순차 입장 시작 | OK |
-| `ended` | disable_at 도달 | phase=ended | 트래픽 직통 | OK |
+| `pending` | 등록 직후 | enabled=false | Origin 직접 접근 | OK |
+| `active` | start_at 도달 | enabled=true | 대기실 ON, 순차 입장 시작 | OK |
+| `ended` | end_at 도달 | enabled=false | 대기실 자동 OFF, 트래픽 직통 | OK |
 
-### 7.3 Queuing phase 상세
-
-```
-enable_at 도달 시:
-- 상태: active_users=0, queue_length=1 (접속자 전원 대기열)
-- 5명 추가 접속: active_users=0, queue_length=6
-- Reaper: 만료만 처리, 입장 차단 (max_active=0으로 동작)
-```
-
-### 7.4 Active phase 상세
+### 7.3 Active phase 상세
 
 ```
 start_at 도달 시:
+- config.enabled = true 자동 전환
 - phase: "active"
-- 대기열에서 max_active_users=1만큼 순차 입장
-- 입장된 사용자: "티켓 구매" 페이지 정상 접근
+- 대기열에서 max_active_users만큼 순차 입장
+- 입장된 사용자: Origin 페이지 정상 접근
 - TTL 만료 → 다음 사용자 자동 입장
 ```
 
-### 7.5 Ended phase 상세
+### 7.4 Ended phase 상세
 
 ```
-disable_at 도달 시:
+end_at 도달 시:
+- config.enabled = false 자동 전환 (대기실 OFF)
 - phase: "ended"
-- 스케줄이 config에 더 이상 영향을 주지 않음
+- 모든 트래픽 Origin 직통
 ```
 
-### 7.6 운영 흐름 예시
+### 7.5 운영 흐름 예시
 
 ```
-09:50 enable_at  → 대기 페이지 노출, 사용자들이 대기열에 쌓임 (선착순 결정)
-10:00 start_at   → 대기열에서 순차 입장 시작
-11:00 disable_at → 이벤트 종료, 대기실 OFF
+10:00 start_at → 대기실 ON, 대기열에서 순차 입장 시작
+11:00 end_at   → 이벤트 종료, 대기실 자동 OFF
 ```

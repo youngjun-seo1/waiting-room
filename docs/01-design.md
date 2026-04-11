@@ -70,6 +70,20 @@ waiting-room/
 │   ├── scheduler.rs           # 이벤트 스케줄러 (시간 기반 자동 제어)
 │   └── templates/
 │       └── waiting.html       # 대기 페이지 HTML
+├── admin/                     # Admin SPA (React + TypeScript + Vite)
+│   ├── src/
+│   │   ├── App.tsx            # 라우팅 (Dashboard / Schedules)
+│   │   ├── api.ts             # Admin API 클라이언트
+│   │   ├── pages/
+│   │   │   ├── Dashboard.tsx  # 실시간 상태 모니터링
+│   │   │   ├── SchedulesPage.tsx  # 스케줄 CRUD
+│   │   │   └── Login.tsx      # API Key 인증
+│   │   └── components/
+│   │       ├── QueueVisualizer.tsx  # 큐 시각화
+│   │       ├── StatusBadge.tsx     # 상태 뱃지
+│   │       ├── Settings.tsx        # 런타임 설정 변경
+│   │       └── Schedules.tsx       # 스케줄 컴포넌트
+│   └── package.json
 ├── examples/
 │   ├── origin.rs              # 테스트용 오리진 서버
 │   ├── bench.rs               # 단일 서버 벤치마크
@@ -77,7 +91,8 @@ waiting-room/
 └── docs/
     ├── 01-design.md           # 설계 문서 (이 파일)
     ├── 02-implementation.md   # 구현 문서
-    └── 03-testing.md          # 테스트 문서
+    ├── 03-testing.md          # 테스트 문서
+    └── 04-qna.md              # Q&A
 ```
 
 ---
@@ -157,19 +172,36 @@ Reaper/Admin → PUBLISH wr:notify → Redis Pub/Sub
 
 특정 시간에 대기실을 자동으로 제어하는 기능. 쿠폰 선착순 등 이벤트 운영에 사용.
 
-**3단계 라이프사이클:**
+**2단계 라이프사이클:**
 
 ```
-[pending] ──enable_at──→ [queuing] ──start_at──→ [active] ──disable_at──→ [ended]
-                          대기열 수집만            순차 입장 시작           대기실 종료
-                          (입장 차단)             (reaper 동작)           (트래픽 직통)
+[pending] ──start_at──→ [active] ──end_at──→ [ended]
+                         대기실 ON,           대기실 OFF
+                         순차 입장             (트래픽 직통)
 ```
 
 **구현 방식:**
-- `scheduler.rs`: 1초마다 스케줄 목록을 확인, phase 전환 시 `config.enabled`와 `config.schedule_started`를 자동 변경
-- Queuing phase: `max_active`를 0으로 설정 → 모든 요청이 대기열로
-- Active phase: `max_active`를 스케줄에 설정된 값으로 복원 → 대기열에서 순차 입장
-- Admin API로 스케줄 CRUD 가능
+- `scheduler.rs`: 1초마다 스케줄 목록을 확인, phase 전환 시 `config.enabled`를 자동 변경
+- Active phase: `config.enabled = true`, `max_active`를 스케줄에 설정된 값으로 적용 → 대기열에서 순차 입장
+- Ended phase: `config.enabled = false` 자동 전환 → 트래픽 직통
+- Admin API 또는 Admin SPA에서 스케줄 CRUD 가능
+
+### 4.9 Admin SPA
+
+React + TypeScript + Vite 기반 관리 대시보드. Waiting Room 서버와 독립적으로 실행.
+
+**주요 기능:**
+- **Dashboard**: 실시간 큐 상태 모니터링 (활성 사용자, 대기열 길이, 평균 활성 시간)
+- **Schedules**: 스케줄 등록/삭제, phase 실시간 표시
+- **Settings**: 런타임 설정 변경 (max_active_users, session_ttl 등)
+- 2초 간격 폴링으로 상태 자동 갱신
+
+**실행:**
+```bash
+cd admin
+npm install
+npm run dev    # Vite dev server (http://localhost:5173)
+```
 
 ---
 
