@@ -1,7 +1,23 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
 import { usePolling } from '../hooks/usePolling';
 import { QueueVisualizer } from '../components/QueueVisualizer';
+
+function LiveClock() {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  const date = now.toLocaleDateString([], { year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short' });
+  return (
+    <div className="flex items-baseline gap-3">
+      <span className="text-2xl font-mono font-bold tracking-widest text-gray-800 tabular-nums">{time}</span>
+      <span className="text-xs text-gray-400">{date}</span>
+    </div>
+  );
+}
 
 interface Status {
   enabled: boolean;
@@ -84,6 +100,14 @@ const [activeSchedule, setActiveSchedule] = useState<Schedule | null>(null);
       {error && (
         <div className="bg-red-50 text-red-600 text-sm rounded-lg p-3">{error}</div>
       )}
+
+      <div className="flex items-center justify-between">
+        <LiveClock />
+        <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${status?.enabled ? 'text-green-600' : 'text-gray-400'}`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${status?.enabled ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}`} />
+          {status?.enabled ? 'LIVE' : 'OFFLINE'}
+        </span>
+      </div>
 
       <QueueVisualizer stats={status} enabled={status?.enabled ?? false} />
 
