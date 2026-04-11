@@ -58,6 +58,7 @@ export function SchedulesPage() {
 
   const [defaultMaxActive, setDefaultMaxActive] = useState('100');
   const [defaultSessionTtl, setDefaultSessionTtl] = useState('');
+  const [defaultOriginUrl, setDefaultOriginUrl] = useState('');
 
   const fetchSchedules = useCallback(async () => {
     try {
@@ -83,8 +84,10 @@ export function SchedulesPage() {
     api.getConfig().then((cfg: Record<string, unknown>) => {
       const max = String(cfg.max_active_users ?? '100');
       const ttl = String(cfg.session_ttl_secs ?? '');
+      const origin = String(cfg.origin_url ?? '');
       setDefaultMaxActive(max);
       setDefaultSessionTtl(ttl);
+      setDefaultOriginUrl(origin);
       setMaxActive(max);
       setSessionTtl(ttl);
     }).catch(() => {});
@@ -142,12 +145,15 @@ export function SchedulesPage() {
     try {
       const now = new Date();
       const end = new Date(now.getTime() + 5 * 60 * 1000);
-      await api.createSchedule({
+      const data: Record<string, unknown> = {
         name: `Quick Test`,
         start_at: now.toISOString(),
         end_at: end.toISOString(),
-        max_active_users: maxActive ? parseInt(maxActive) : parseInt(defaultMaxActive),
-      });
+        max_active_users: parseInt(defaultMaxActive),
+        session_ttl_secs: parseInt(defaultSessionTtl),
+      };
+      data.origin_url = defaultOriginUrl;
+      await api.createSchedule(data);
       setMessage('테스트 스케줄이 생성되었습니다 (5분간).');
       setTimeout(() => setMessage(''), 3000);
       fetchSchedules();

@@ -1,5 +1,5 @@
 listen_addr = "0.0.0.0:8080"
-origin_url = "http://127.0.0.1:3000"
+origin_url = "http://localhost:3000"
 max_active_users = 100
 session_ttl_secs = 5
 queue_cookie_name = "__wr_token"
