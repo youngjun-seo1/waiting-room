@@ -1,3 +1,4 @@
 /target
 dump.rdb
 admin/node_modules/
+.idea/
