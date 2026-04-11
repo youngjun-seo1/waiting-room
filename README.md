@@ -75,3 +75,4 @@ curl -X POST -H "X-Api-Key: ..." -H "Content-Type: application/json" \
 - [구현](docs/02-implementation.md)
 - [테스트](docs/03-testing.md)
 - [Q&A](docs/04-qna.md)
+- [Cloudflare 비교 분석](docs/05-comparison.md)
