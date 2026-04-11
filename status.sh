@@ -12,6 +12,7 @@ check() {
 
 echo "Server Status"
 echo "============="
-check "Origin"       3000
-check "Waiting Room" 8080
-check "Admin SPA"    5173
+check "Origin"         3000
+check "Waiting Room"   8080
+check "Waiting Room"   8081
+check "Admin SPA"      5173
