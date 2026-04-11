@@ -18,33 +18,29 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Build
-echo "==> Building waiting-room..."
-cargo build --release 2>&1
-
-# 1) Origin server (port 3000)
-echo "==> Starting origin server (port 3000)..."
-cargo run --release --example origin &
+# 1) Origin server (port 3000) - hot reload on examples/ changes
+echo "==> Starting origin server (port 3000, hot reload)..."
+cargo watch -w examples/ -x "run --example origin" &
 PIDS+=($!)
-sleep 1
+sleep 3
 
 if [ "$MODE" = "redis" ]; then
-  # Redis mode: 2 WR servers
-  echo "==> Starting waiting-room server #1 (port 8080, Redis)..."
-  WR_REDIS_URL="$REDIS_URL" WR_LISTEN_ADDR="0.0.0.0:8080" ./target/release/waiting-room config.toml &
+  # Redis mode: 2 WR servers - hot reload on src/ changes
+  echo "==> Starting waiting-room server #1 (port 8080, Redis, hot reload)..."
+  WR_REDIS_URL="$REDIS_URL" WR_LISTEN_ADDR="0.0.0.0:8080" cargo watch -w src/ -w config.toml -x "run -- config.toml" &
   PIDS+=($!)
-  sleep 1
+  sleep 3
 
-  echo "==> Starting waiting-room server #2 (port 8081, Redis)..."
-  WR_REDIS_URL="$REDIS_URL" WR_LISTEN_ADDR="0.0.0.0:8081" ./target/release/waiting-room config.toml &
+  echo "==> Starting waiting-room server #2 (port 8081, Redis, hot reload)..."
+  WR_REDIS_URL="$REDIS_URL" WR_LISTEN_ADDR="0.0.0.0:8081" cargo watch -w src/ -w config.toml -x "run -- config.toml" &
   PIDS+=($!)
-  sleep 1
+  sleep 3
 else
-  # Local mode: 1 WR server (in-memory)
-  echo "==> Starting waiting-room server (port 8080)..."
-  ./target/release/waiting-room config.toml &
+  # Local mode: 1 WR server (in-memory) - hot reload on src/ changes
+  echo "==> Starting waiting-room server (port 8080, hot reload)..."
+  cargo watch -w src/ -w config.toml -x "run -- config.toml" &
   PIDS+=($!)
-  sleep 1
+  sleep 3
 fi
 
 # Admin SPA
