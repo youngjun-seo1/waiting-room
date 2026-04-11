@@ -12,6 +12,8 @@ interface Dot {
   y: number;
   targetX: number;
   targetY: number;
+  finalX: number;
+  finalY: number;
   state: 'entering' | 'queued' | 'admitting' | 'active' | 'exiting';
   opacity: number;
   progress: number;
@@ -27,12 +29,12 @@ const COLORS = {
 
 const CANVAS_W = 720;
 const CANVAS_H = 280;
-const DOT_R = 4;
+const DOT_R = 3;
 const GATE_X = 360;
 const QUEUE_START_X = 40;
 const ACTIVE_START_X = 420;
 const EXIT_X = 700;
-const MAX_DOTS = 200; // max visual dots per zone
+const MAX_DOTS = 500; // max visual dots per zone
 
 function lerp(a: number, b: number, t: number) {
   return a + (b - a) * Math.min(t, 1);
@@ -52,9 +54,11 @@ function randomActivePos() {
   };
 }
 
-function scaleCount(real: number, total: number): number {
-  if (total <= MAX_DOTS) return real;
-  return Math.round((real / total) * MAX_DOTS);
+function scaleCounts(queue: number, active: number): { queued: number; active: number } {
+  const total = queue + active;
+  if (total <= MAX_DOTS) return { queued: queue, active };
+  const scaledQueued = Math.round((queue / total) * MAX_DOTS);
+  return { queued: scaledQueued, active: MAX_DOTS - scaledQueued };
 }
 
 export function QueueVisualizer({ stats, enabled }: { stats: Stats | null; enabled: boolean }) {
@@ -67,15 +71,21 @@ export function QueueVisualizer({ stats, enabled }: { stats: Stats | null; enabl
   useEffect(() => {
     if (!stats) return;
     const dots = dotsRef.current;
-    const total = stats.queue_length + stats.active_users;
-    const targetQueued = scaleCount(stats.queue_length, total);
-    const targetActive = scaleCount(stats.active_users, total);
+    const { queued: targetQueued, active: targetActive } = scaleCounts(
+      stats.queue_length,
+      stats.active_users,
+    );
 
-    // Count current settled dots (not transitioning)
-    const currentQueued = dots.filter(d => d.state === 'queued' || d.state === 'entering').length;
+    // Count only settled dots — transitioning dots are already accounted for
+    const currentQueued = dots.filter(d => d.state === 'queued').length;
+    const currentEntering = dots.filter(d => d.state === 'entering').length;
+    const currentActive = dots.filter(d => d.state === 'active').length;
+    const currentAdmitting = dots.filter(d => d.state === 'admitting').length;
 
     // --- Adjust queued dots ---
-    const queueDiff = targetQueued - currentQueued;
+    // settled + incoming entering dots should match target
+    const effectiveQueued = currentQueued + currentEntering;
+    const queueDiff = targetQueued - effectiveQueued;
     if (queueDiff > 0) {
       for (let i = 0; i < queueDiff; i++) {
         const pos = randomQueuePos();
@@ -85,13 +95,15 @@ export function QueueVisualizer({ stats, enabled }: { stats: Stats | null; enabl
           y: pos.y,
           targetX: pos.x,
           targetY: pos.y,
+          finalX: pos.x,
+          finalY: pos.y,
           state: 'entering',
           opacity: 0,
           progress: 0,
         });
       }
     } else if (queueDiff < 0) {
-      // Queue shrank → users admitted through gate
+      // Queue shrank → move settled queued dots through gate first
       let toAdmit = Math.min(-queueDiff, currentQueued);
       let moved = 0;
       for (const dot of dots) {
@@ -100,20 +112,22 @@ export function QueueVisualizer({ stats, enabled }: { stats: Stats | null; enabl
           const pos = randomActivePos();
           dot.state = 'admitting';
           dot.progress = 0;
-          dot.targetX = pos.x;
-          dot.targetY = pos.y;
+          // First move to gate, then to final active position
+          dot.targetX = GATE_X;
+          dot.targetY = CANVAS_H / 2;
+          dot.finalX = pos.x;
+          dot.finalY = pos.y;
           moved++;
         }
       }
     }
 
     // --- Adjust active dots ---
-    // Recount after queue adjustments (admitting dots count toward active target)
-    const nowActive = dots.filter(d => d.state === 'active' || d.state === 'admitting').length;
-    const activeDiff = targetActive - nowActive;
+    // settled + incoming admitting dots should match target
+    const effectiveActive = currentActive + currentAdmitting;
+    const activeDiff = targetActive - effectiveActive;
 
     if (activeDiff > 0) {
-      // Add new active dots directly (direct admit, no queue source)
       for (let i = 0; i < activeDiff; i++) {
         const pos = randomActivePos();
         dots.push({
@@ -122,6 +136,8 @@ export function QueueVisualizer({ stats, enabled }: { stats: Stats | null; enabl
           y: pos.y,
           targetX: pos.x,
           targetY: pos.y,
+          finalX: pos.x,
+          finalY: pos.y,
           state: 'admitting',
           opacity: 0.5,
           progress: 0,
@@ -135,6 +151,8 @@ export function QueueVisualizer({ stats, enabled }: { stats: Stats | null; enabl
           dot.state = 'exiting';
           dot.progress = 0;
           dot.targetX = EXIT_X + 20;
+          dot.finalX = EXIT_X + 20;
+          dot.finalY = dot.y;
           toRemove--;
         }
       }
@@ -219,8 +237,15 @@ export function QueueVisualizer({ stats, enabled }: { stats: Stats | null; enabl
             dot.y = lerp(dot.y, dot.targetY, dot.progress);
             dot.opacity = Math.min(dot.opacity + 0.03, 0.9);
             if (dot.progress >= 1) {
-              dot.state = 'active';
-              dot.progress = 0;
+              // If at gate (intermediate stop), continue to final active position
+              if (dot.targetX !== dot.finalX || dot.targetY !== dot.finalY) {
+                dot.targetX = dot.finalX;
+                dot.targetY = dot.finalY;
+                dot.progress = 0;
+              } else {
+                dot.state = 'active';
+                dot.progress = 0;
+              }
             }
             break;
           case 'active':
