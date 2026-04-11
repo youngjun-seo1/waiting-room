@@ -105,6 +105,7 @@ export function Dashboard() {
               active
             </span>
             <span className="text-sm font-semibold text-indigo-900">{activeSchedule.name}</span>
+            <span className="text-xs text-indigo-400">#{activeSchedule.id}</span>
           </div>
           <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-indigo-700">
             <span>{formatRange(activeSchedule.start_at, activeSchedule.end_at)}</span>
@@ -150,6 +151,7 @@ export function Dashboard() {
                   ended
                 </span>
                 <span className="text-sm font-semibold text-gray-800">{lastEndedSchedule.name}</span>
+                <span className="text-xs text-gray-400">#{lastEndedSchedule.id}</span>
               </div>
               <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-600">
                 <span>{formatRange(lastEndedSchedule.start_at, lastEndedSchedule.end_at)}</span>
@@ -192,6 +194,7 @@ export function Dashboard() {
                   pending
                 </span>
                 <span className="text-sm font-semibold text-yellow-900">{nextPendingSchedule.name}</span>
+                <span className="text-xs text-yellow-500">#{nextPendingSchedule.id}</span>
               </div>
               <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-yellow-700">
                 <span>{formatRange(nextPendingSchedule.start_at, nextPendingSchedule.end_at)}</span>
