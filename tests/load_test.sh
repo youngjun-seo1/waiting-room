@@ -13,7 +13,6 @@ mkdir -p "$COOKIE_DIR" "$RESULT_DIR"
 
 echo "=== Waiting Room Load Test ==="
 echo "Total users: $TOTAL"
-echo "Max active: 10, TTL: 1s, Reaper: 1s"
 echo ""
 
 # Phase 1: 1000명 동시 접속
