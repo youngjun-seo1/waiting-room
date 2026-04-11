@@ -39,10 +39,22 @@ function formatTime(iso: string) {
   return new Date(iso).toLocaleString();
 }
 
+function formatRange(startIso: string, endIso: string) {
+  const start = new Date(startIso);
+  const end = new Date(endIso);
+  const sameDay = start.toLocaleDateString() === end.toLocaleDateString();
+  if (sameDay) {
+    return `${start.toLocaleDateString()} ${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ~ ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  }
+  return `${formatTime(startIso)} ~ ${formatTime(endIso)}`;
+}
+
 export function Dashboard() {
   const [status, setStatus] = useState<Status | null>(null);
   const [config, setConfig] = useState<Config | null>(null);
   const [activeSchedule, setActiveSchedule] = useState<Schedule | null>(null);
+  const [lastEndedSchedule, setLastEndedSchedule] = useState<Schedule | null>(null);
+  const [nextPendingSchedule, setNextPendingSchedule] = useState<Schedule | null>(null);
   const [error, setError] = useState('');
 
   const fetchAll = useCallback(async () => {
@@ -54,8 +66,20 @@ export function Dashboard() {
       ]);
       setStatus(st);
       setConfig(c);
-      const active = (sch.schedules || []).find((s: Schedule) => s.phase === 'active') || null;
+      const schedules: Schedule[] = sch.schedules || [];
+      const active = schedules.find((s) => s.phase === 'active') || null;
       setActiveSchedule(active);
+
+      const ended = schedules
+        .filter((s) => s.phase === 'ended')
+        .sort((a, b) => new Date(b.end_at).getTime() - new Date(a.end_at).getTime());
+      setLastEndedSchedule(ended[0] || null);
+
+      const pending = schedules
+        .filter((s) => s.phase === 'pending')
+        .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime());
+      setNextPendingSchedule(pending[0] || null);
+
       setError('');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Connection lost');
@@ -81,9 +105,8 @@ export function Dashboard() {
             </span>
             <span className="text-sm font-semibold text-indigo-900">{activeSchedule.name}</span>
           </div>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-indigo-700">
-            <span>Start: {formatTime(activeSchedule.start_at)}</span>
-            <span>End: {formatTime(activeSchedule.end_at)}</span>
+          <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-indigo-700">
+            <span>{formatRange(activeSchedule.start_at, activeSchedule.end_at)}</span>
             {activeSchedule.max_active_users && (
               <span>Max Active: {activeSchedule.max_active_users}</span>
             )}
@@ -108,6 +131,73 @@ export function Dashboard() {
               <div className="text-center">
                 <div className="text-lg font-bold text-indigo-900">{activeSchedule.stats.total_visitors.toLocaleString()}</div>
                 <div className="text-[10px] text-indigo-500">Visitors</div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Recent & Upcoming Schedules */}
+      {(lastEndedSchedule || nextPendingSchedule) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Last Ended */}
+          {lastEndedSchedule && (
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-600">
+                  ended
+                </span>
+                <span className="text-sm font-semibold text-gray-800">{lastEndedSchedule.name}</span>
+              </div>
+              <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-600">
+                <span>{formatRange(lastEndedSchedule.start_at, lastEndedSchedule.end_at)}</span>
+                {lastEndedSchedule.max_active_users && (
+                  <span>Max Active: {lastEndedSchedule.max_active_users}</span>
+                )}
+                {lastEndedSchedule.origin_url && (
+                  <span>Origin: {lastEndedSchedule.origin_url}</span>
+                )}
+              </div>
+              {lastEndedSchedule.stats && (
+                <div className="grid grid-cols-4 gap-2 mt-3 pt-3 border-t border-gray-200">
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-gray-800">{lastEndedSchedule.stats.peak_active_users.toLocaleString()}</div>
+                    <div className="text-[10px] text-gray-400">Peak Active</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-gray-800">{lastEndedSchedule.stats.peak_queue_length.toLocaleString()}</div>
+                    <div className="text-[10px] text-gray-400">Peak Queue</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-gray-800">{lastEndedSchedule.stats.total_admitted.toLocaleString()}</div>
+                    <div className="text-[10px] text-gray-400">Admitted</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-gray-800">{lastEndedSchedule.stats.total_visitors.toLocaleString()}</div>
+                    <div className="text-[10px] text-gray-400">Visitors</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Next Pending */}
+          {nextPendingSchedule && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">
+                  pending
+                </span>
+                <span className="text-sm font-semibold text-yellow-900">{nextPendingSchedule.name}</span>
+              </div>
+              <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-yellow-700">
+                <span>{formatRange(nextPendingSchedule.start_at, nextPendingSchedule.end_at)}</span>
+                {nextPendingSchedule.max_active_users && (
+                  <span>Max Active: {nextPendingSchedule.max_active_users}</span>
+                )}
+                {nextPendingSchedule.origin_url && (
+                  <span>Origin: {nextPendingSchedule.origin_url}</span>
+                )}
               </div>
             </div>
           )}
