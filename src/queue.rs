@@ -69,6 +69,7 @@ impl WaitingQueue {
         self.active.len()
     }
 
+    #[cfg(test)]
     pub fn waiting_count(&self) -> usize {
         self.waiting.len()
     }
