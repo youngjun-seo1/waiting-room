@@ -34,6 +34,7 @@ pub async fn load_schedules(state: &AppState) -> Vec<Schedule> {
                         for s in &mut schedules {
                             recompute_phase(s);
                         }
+                        schedules.sort_by(|a, b| b.start_at.cmp(&a.start_at));
                         // Update local cache
                         *state.schedules.write() = schedules.clone();
                         return schedules;
@@ -48,7 +49,9 @@ pub async fn load_schedules(state: &AppState) -> Vec<Schedule> {
             }
         }
     }
-    state.schedules.read().clone()
+    let mut schedules = state.schedules.read().clone();
+    schedules.sort_by(|a, b| b.start_at.cmp(&a.start_at));
+    schedules
 }
 
 /// Save a schedule. Redis if available, always updates in-memory.
