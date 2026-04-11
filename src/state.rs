@@ -41,8 +41,35 @@ impl AppState {
         self.enabled.load(Ordering::Relaxed)
     }
 
-    pub fn set_enabled(&self, val: bool) {
+    /// Set enabled state and persist to Redis (if Redis mode).
+    /// Also publishes the change via `wr:notify` so other instances sync.
+    pub async fn set_enabled_sync(&self, val: bool) {
         self.enabled.store(val, Ordering::Relaxed);
+        if let Some(pool) = &self.redis_pool {
+            if let Ok(mut conn) = pool.get().await {
+                let _: Result<(), _> = cmd("SET")
+                    .arg("wr:enabled")
+                    .arg(if val { "1" } else { "0" })
+                    .query_async(&mut *conn)
+                    .await;
+            }
+        }
+    }
+
+    /// Load enabled state from Redis into the local AtomicBool cache.
+    /// Called on startup and by pubsub listener to stay in sync.
+    pub async fn load_enabled_from_redis(&self) {
+        if let Some(pool) = &self.redis_pool {
+            if let Ok(mut conn) = pool.get().await {
+                let val: Option<String> = cmd("GET")
+                    .arg("wr:enabled")
+                    .query_async(&mut *conn)
+                    .await
+                    .ok();
+                let enabled = val.as_deref() == Some("1");
+                self.enabled.store(enabled, Ordering::Relaxed);
+            }
+        }
     }
 
     pub fn notify_queue_update(&self) {

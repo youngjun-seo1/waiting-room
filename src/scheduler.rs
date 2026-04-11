@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-
+use deadpool_redis::redis::cmd;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
@@ -82,6 +82,8 @@ pub struct ScheduleState {
     pub just_started: bool,
     /// A schedule just transitioned from Active to Ended
     pub just_ended: bool,
+    /// IDs of schedules that have ended (for one-time cleanup)
+    pub ended_schedule_ids: Vec<String>,
 }
 
 pub fn evaluate_schedules(schedules: &mut Vec<Schedule>) -> ScheduleState {
@@ -94,6 +96,7 @@ pub fn evaluate_schedules(schedules: &mut Vec<Schedule>) -> ScheduleState {
         active_schedule_id: None,
         just_started: false,
         just_ended: false,
+        ended_schedule_ids: Vec::new(),
     };
 
     for schedule in schedules.iter_mut() {
@@ -106,6 +109,7 @@ pub fn evaluate_schedules(schedules: &mut Vec<Schedule>) -> ScheduleState {
                     result.just_ended = true;
                 }
             }
+            result.ended_schedule_ids.push(schedule.id.clone());
             continue;
         }
 
@@ -129,6 +133,29 @@ pub fn evaluate_schedules(schedules: &mut Vec<Schedule>) -> ScheduleState {
     result
 }
 
+/// Attempt to claim a one-time event for a schedule via Redis SETNX.
+/// Returns true only for the first caller (across all instances).
+/// For memory-only mode, always returns true (single instance).
+async fn try_claim_once(state: &AppState, key: &str) -> bool {
+    if let Some(pool) = &state.redis_pool {
+        if let Ok(mut conn) = pool.get().await {
+            let acquired: Option<String> = cmd("SET")
+                .arg(key)
+                .arg("1")
+                .arg("NX")
+                .arg("EX")
+                .arg(86400) // expire after 24h
+                .query_async(&mut *conn)
+                .await
+                .ok()
+                .flatten();
+            return acquired.is_some();
+        }
+        return false;
+    }
+    true
+}
+
 pub fn spawn_scheduler(state: Arc<AppState>) {
     tokio::spawn(async move {
         let mut tick: u64 = 0;
@@ -147,9 +174,9 @@ pub fn spawn_scheduler(state: Arc<AppState>) {
                 evaluate_schedules(&mut schedules)
             };
 
-            // Apply schedule state
+            // Apply schedule state (persist to Redis if available)
             if let Some(_name) = &schedule_state.active_schedule {
-                state.set_enabled(true);
+                state.set_enabled_sync(true).await;
                 let mut config = state.config.write();
                 if let Some(max) = schedule_state.max_active_override {
                     config.max_active_users = max;
@@ -158,13 +185,24 @@ pub fn spawn_scheduler(state: Arc<AppState>) {
                     config.origin_url = url.clone();
                 }
             } else {
-                state.set_enabled(false);
+                state.set_enabled_sync(false).await;
             }
 
             // Flush queue on schedule start (clean slate)
-            if schedule_state.just_started {
-                state.queue.flush().await;
-                info!("schedule started: queue flushed for clean start");
+            if let Some(ref schedule_id) = schedule_state.active_schedule_id {
+                // Memory mode: flush only on transition event
+                // Redis mode: use SETNX to ensure flush happens exactly once per schedule,
+                // even across multiple instances or server restarts.
+                let should_flush = if state.redis_pool.is_some() {
+                    try_claim_once(&state, &format!("wr:flushed:{}", schedule_id)).await
+                } else {
+                    schedule_state.just_started
+                };
+                if should_flush {
+                    state.queue.flush().await;
+                    state.notify_queue_update();
+                    info!("schedule started: queue flushed for clean start");
+                }
             }
 
             // Update stats for active schedule
@@ -184,30 +222,41 @@ pub fn spawn_scheduler(state: Arc<AppState>) {
             }
 
             // Capture final stats and flush queue on schedule end
-            if schedule_state.just_ended && schedule_state.active_schedule.is_none() {
-                // Final stats snapshot before flush
-                let queue_stats = state.queue.stats().await;
-                {
-                    let mut schedules = state.schedules.write();
-                    for schedule in schedules.iter_mut() {
-                        if schedule.phase == SchedulePhase::Ended {
-                            if queue_stats.active_count > schedule.stats.peak_active_users {
-                                schedule.stats.peak_active_users = queue_stats.active_count;
+            // Use Redis SETNX to ensure cleanup happens exactly once per schedule,
+            // even across multiple instances or after server restarts.
+            if schedule_state.active_schedule.is_none() {
+                for ended_id in &schedule_state.ended_schedule_ids {
+                    let key = format!("wr:ended:{}", ended_id);
+                    let should_cleanup = if state.redis_pool.is_some() {
+                        try_claim_once(&state, &key).await
+                    } else {
+                        schedule_state.just_ended
+                    };
+                    if should_cleanup {
+                        // Final stats snapshot before flush
+                        let queue_stats = state.queue.stats().await;
+                        {
+                            let mut schedules = state.schedules.write();
+                            if let Some(schedule) = schedules.iter_mut().find(|s| s.id == *ended_id) {
+                                if queue_stats.active_count > schedule.stats.peak_active_users {
+                                    schedule.stats.peak_active_users = queue_stats.active_count;
+                                }
+                                if queue_stats.waiting_count > schedule.stats.peak_queue_length {
+                                    schedule.stats.peak_queue_length = queue_stats.waiting_count;
+                                }
+                                schedule.stats.total_admitted = queue_stats.total_admitted;
+                                schedule.stats.total_visitors = queue_stats.total_visitors;
                             }
-                            if queue_stats.waiting_count > schedule.stats.peak_queue_length {
-                                schedule.stats.peak_queue_length = queue_stats.waiting_count;
-                            }
-                            schedule.stats.total_admitted = queue_stats.total_admitted;
-                    schedule.stats.total_visitors = queue_stats.total_visitors;
                         }
+                        // Persist final stats to Redis
+                        crate::schedule_store::save_all_schedules(&state).await;
+
+                        state.queue.flush().await;
+                        state.notify_queue_update();
+                        info!(schedule_id = %ended_id, "schedule ended: queue flushed, clients notified");
+                        break; // only flush once per tick
                     }
                 }
-                // Persist final stats to Redis
-                crate::schedule_store::save_all_schedules(&state).await;
-
-                state.queue.flush().await;
-                state.notify_queue_update();
-                info!("schedule ended: queue flushed, clients notified");
             }
 
             // Periodically persist stats to Redis (every 10 seconds)
