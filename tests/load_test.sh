@@ -3,9 +3,9 @@
 # max_active=10, session_ttl=1s, reaper_interval=1s
 # → 10명씩 ~1초 간격으로 순차 입장
 
-set -euo pipefail
+set -uo pipefail
 
-TOTAL=1000
+TOTAL="${1:-1000}"
 WR_URL="http://localhost:8080"
 COOKIE_DIR="/tmp/wr_load_test"
 RESULT_DIR="/tmp/wr_load_results"
@@ -42,29 +42,19 @@ send_request() {
 export -f send_request
 export COOKIE_DIR RESULT_DIR WR_URL
 
-seq 1 "$TOTAL" | xargs -P "$CONCURRENCY" -I {} bash -c 'send_request "$@"' _ {}
+seq 1 "$TOTAL" | xargs -P "$CONCURRENCY" -I {} bash -c 'send_request "$@"' _ {} || true
 
 END=$(date +%s%N)
 ELAPSED=$(( (END - START) / 1000000 ))
 
-# 결과 분석
-ADMITTED=0
-QUEUED=0
-ERRORS=0
+# 결과 분석 (개별 cat/grep 대신 일괄 처리)
+echo ""
+echo "Analyzing results..."
 
-for i in $(seq 1 "$TOTAL"); do
-    status=$(cat "$RESULT_DIR/user_${i}_status.txt" 2>/dev/null || echo "000")
-    if [ "$status" = "200" ]; then
-        body="$RESULT_DIR/user_$i.html"
-        if grep -q "티켓 구매" "$body" 2>/dev/null; then
-            ADMITTED=$((ADMITTED + 1))
-        elif grep -q "Please wait" "$body" 2>/dev/null; then
-            QUEUED=$((QUEUED + 1))
-        fi
-    else
-        ERRORS=$((ERRORS + 1))
-    fi
-done
+ADMITTED=$(grep -rl "티켓 구매" "$RESULT_DIR"/user_*.html 2>/dev/null | wc -l | tr -d ' ')
+QUEUED=$(grep -rl "Please wait" "$RESULT_DIR"/user_*.html 2>/dev/null | wc -l | tr -d ' ')
+TOTAL_OK=$(grep -rl "^200$" "$RESULT_DIR"/user_*_status.txt 2>/dev/null | wc -l | tr -d ' ')
+ERRORS=$((TOTAL - TOTAL_OK))
 
 echo ""
 echo "[Phase 1 Results] ${ELAPSED}ms elapsed"
