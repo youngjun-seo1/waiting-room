@@ -93,3 +93,11 @@ Client → [Waiting Room Proxy] → 입장 가능? → Origin
 | 대기열 로직을 완전히 커스텀해야 할 때 | Self-Hosted |
 | 소규모 이벤트 (수천 동접 이하) | Self-Hosted (비용 효율) |
 | 내부 시스템/사내 서비스 | Self-Hosted |
+
+## 8. 참고 자료
+
+- [Cloudflare Waiting Room - About](https://developers.cloudflare.com/waiting-room/about/)
+- [Cloudflare Waiting Room - Configuration Settings](https://developers.cloudflare.com/waiting-room/reference/configuration-settings/)
+- [Cloudflare Waiting Room - FAQ / Troubleshooting](https://developers.cloudflare.com/waiting-room/troubleshooting/)
+
+> 참고: Cloudflare Waiting Room은 대기 페이지에서 20초마다 HTTP refresh 헤더로 자동 새로고침하는 방식을 사용한다. (SSE/WebSocket 아님)

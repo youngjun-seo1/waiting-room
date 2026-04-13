@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Waiting Room - 리더 미팅 소개</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; overflow: hidden; }
+
+  /* Slide container */
+  .deck { width: 100vw; height: 100vh; position: relative; }
+  .slide { display: none; width: 100%; height: 100%; padding: 60px 80px; flex-direction: column; justify-content: center; }
+  .slide.active { display: flex; }
+
+  /* Typography */
+  h1 { font-size: 2.8em; font-weight: 800; margin-bottom: 16px; }
+  h2 { font-size: 2.2em; font-weight: 700; margin-bottom: 32px; color: #f8fafc; }
+  h3 { font-size: 1.3em; font-weight: 600; margin-bottom: 12px; color: #94a3b8; }
+  p, li { font-size: 1.25em; line-height: 1.7; color: #cbd5e1; }
+  ul { list-style: none; padding-left: 0; }
+  ul li { padding: 6px 0; }
+  ul li::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 14px; vertical-align: middle; }
+
+  /* Color accents */
+  .accent { color: #818cf8; }
+  .accent-green { color: #34d399; }
+  .accent-amber { color: #fbbf24; }
+  .accent-rose { color: #fb7185; }
+  ul li::before { background: #818cf8; }
+
+  /* Blockquote */
+  blockquote { border-left: 4px solid #818cf8; padding: 16px 24px; margin: 20px 0; background: rgba(129,140,248,0.08); border-radius: 0 8px 8px 0; font-size: 1.2em; }
+
+  /* Code block */
+  .flow { background: rgba(30,41,59,0.8); border: 1px solid #334155; border-radius: 12px; padding: 28px 36px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 1.15em; line-height: 2; white-space: pre; margin: 20px 0; color: #e2e8f0; }
+  .flow .highlight { color: #818cf8; font-weight: 600; }
+  .flow .green { color: #34d399; }
+  .flow .amber { color: #fbbf24; }
+  .flow .dim { color: #64748b; }
+
+  /* Table */
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 1.1em; }
+  th { text-align: left; padding: 12px 16px; border-bottom: 2px solid #334155; color: #94a3b8; font-weight: 600; }
+  td { padding: 12px 16px; border-bottom: 1px solid #1e293b; color: #cbd5e1; }
+  tr:hover td { background: rgba(129,140,248,0.04); }
+
+  /* Grid */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+  .card { background: rgba(30,41,59,0.6); border: 1px solid #334155; border-radius: 12px; padding: 28px; }
+  .card h3 { color: #f8fafc; margin-bottom: 16px; }
+
+  /* Tags */
+  .tag { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.85em; font-weight: 600; margin: 2px 4px; }
+  .tag-indigo { background: rgba(129,140,248,0.15); color: #818cf8; }
+  .tag-green { background: rgba(52,211,153,0.15); color: #34d399; }
+  .tag-amber { background: rgba(251,191,36,0.15); color: #fbbf24; }
+  .tag-rose { background: rgba(251,113,133,0.15); color: #fb7185; }
+
+  /* Summary boxes */
+  .summary-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-top: 32px; }
+  .summary-item { background: rgba(129,140,248,0.08); border: 1px solid rgba(129,140,248,0.2); border-radius: 12px; padding: 20px; text-align: center; }
+  .summary-item .num { font-size: 1.8em; font-weight: 800; color: #818cf8; }
+  .summary-item .label { font-size: 0.9em; color: #94a3b8; margin-top: 8px; }
+
+  /* Navigation */
+  .nav { position: fixed; bottom: 24px; right: 32px; display: flex; gap: 8px; z-index: 100; }
+  .nav button { background: rgba(51,65,85,0.8); border: 1px solid #475569; color: #e2e8f0; width: 44px; height: 44px; border-radius: 8px; cursor: pointer; font-size: 1.1em; transition: background 0.2s; }
+  .nav button:hover { background: #475569; }
+  .progress { position: fixed; bottom: 0; left: 0; height: 3px; background: #818cf8; transition: width 0.3s; }
+  .page-num { position: fixed; bottom: 30px; left: 32px; color: #64748b; font-size: 0.9em; }
+
+  /* Title slide special */
+  .slide-title { text-align: center; justify-content: center; align-items: center; }
+  .slide-title h1 { font-size: 3.5em; background: linear-gradient(135deg, #818cf8, #34d399); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .slide-title p { font-size: 1.4em; color: #94a3b8; margin-top: 12px; }
+  .slide-title .sub { font-size: 1em; color: #64748b; margin-top: 32px; }
+</style>
+</head>
+<body>
+
+<div class="deck">
+
+  <!-- Slide 1: Title -->
+  <div class="slide slide-title active" data-slide="1">
+    <h1>Waiting Room</h1>
+    <p>트래픽 폭주로부터 서비스를 보호하는 대기실 시스템</p>
+    <p class="sub">기술연구소 리더 미팅</p>
+  </div>
+
+  <!-- Slide 2: Problem -->
+  <div class="slide" data-slide="2">
+    <h2>이런 상황, 겪어보셨나요?</h2>
+    <div class="grid-2">
+      <div>
+        <ul>
+          <li>쿠폰 선착순 이벤트 오픈 <span class="accent-rose">→ 순간 트래픽 폭주</span></li>
+          <li>서버 다운 <span class="accent-rose">→ 사용자 이탈 → CS 폭주</span></li>
+          <li>"새로고침 전쟁" <span class="accent-rose">→ 누가 먼저인지 알 수 없음</span></li>
+        </ul>
+      </div>
+      <div class="card" style="display:flex; align-items:center; justify-content:center;">
+        <blockquote style="border:0; background:none; text-align:center;">
+          놀이공원 줄서기처럼,<br>
+          서버에 들어갈 수 있는 인원을 제한하고<br>
+          나머지는 <span class="accent">순서대로 대기</span>시키는 시스템
+        </blockquote>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slide 3: How it works -->
+  <div class="slide" data-slide="3">
+    <h2>어떻게 동작하나요?</h2>
+    <div class="flow">
+<span class="dim">사용자 접속</span>
+    <span class="dim">↓</span>
+<span class="highlight">[대기실]</span> 자리 있어? ──<span class="green">Yes</span>──→ <span class="green">[서비스 페이지]</span>
+    <span class="dim">↓</span> <span class="amber">No</span>
+<span class="amber">[대기 페이지]</span>
+  <span class="dim">"현재 32번째, 약 2분 대기"</span>
+    <span class="dim">↓ (자동 입장)</span>
+<span class="green">[서비스 페이지]</span></div>
+    <div style="display:flex; gap: 32px; margin-top: 16px;">
+      <span class="tag tag-indigo">선착순 FIFO 대기열</span>
+      <span class="tag tag-green">실시간 순번 표시</span>
+      <span class="tag tag-amber">자동 입장 (새로고침 불필요)</span>
+    </div>
+  </div>
+
+  <!-- Slide 4: How to use -->
+  <div class="slide" data-slide="4">
+    <h2>어떻게 쓰나요?</h2>
+    <div class="grid-2">
+      <div class="card">
+        <h3>1. 코드 변경 없이 적용</h3>
+        <div class="flow" style="font-size:1em; padding: 16px 20px;">
+<span class="dim">[변경 전]</span> 사용자 → 서비스 서버
+<span class="dim">[변경 후]</span> 사용자 → <span class="highlight">Waiting Room</span> → 서비스 서버</div>
+        <p style="font-size:1em; margin-top:12px; color:#94a3b8;">리버스 프록시 방식 — 서비스 서버 앞에 놓기만 하면 됨</p>
+      </div>
+      <div class="card">
+        <h3>2. 스케줄 기반 자동 운영</h3>
+        <ul style="font-size:1em;">
+          <li>이벤트 시작/종료 시간 설정</li>
+          <li>자동으로 대기실 ON/OFF</li>
+          <li>수동 개입 없이 운영 가능</li>
+        </ul>
+        <div style="margin-top: 16px;">
+          <h3>3. Admin 대시보드</h3>
+          <ul style="font-size:1em;">
+            <li>실시간 모니터링</li>
+            <li>Quick Test 즉시 테스트</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slide 5: Performance -->
+  <div class="slide" data-slide="5">
+    <h2>성능</h2>
+    <h3>서버 4대 + Redis 구성</h3>
+    <table>
+      <thead>
+        <tr><th>동시접속</th><th>에러</th><th>처리량</th><th>서버 리소스 (서버당)</th><th>Redis 리소스</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="accent">1,000명</td><td class="accent-green">0건</td><td>3,257 req/s</td><td>CPU 9%, 20MB</td><td>8K ops/s, 37MB</td></tr>
+        <tr><td class="accent">5,000명</td><td class="accent-green">0건</td><td>3,872 req/s</td><td>CPU 42%, 31MB</td><td>40K ops/s, 37MB</td></tr>
+        <tr><td class="accent">10,000명</td><td class="accent-green">0건</td><td>3,734 req/s</td><td>CPU 40%, 31MB</td><td>49K ops/s, 37MB</td></tr>
+      </tbody>
+    </table>
+    <div style="margin-top: 32px;">
+      <h3>vs Cloudflare Waiting Room</h3>
+      <table>
+        <thead>
+          <tr><th></th><th>Cloudflare</th><th>본 프로젝트</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>비용</td><td class="accent-rose">$200/월~</td><td class="accent-green">서버 비용만</td></tr>
+          <tr><td>커스텀</td><td>제한적</td><td class="accent-green">자유로움</td></tr>
+          <tr><td>실시간성</td><td>20초마다 새로고침</td><td class="accent-green">즉시 반영 (실시간)</td></tr>
+          <tr><td>벤더 종속</td><td class="accent-rose">Cloudflare 필수</td><td class="accent-green">어디서든 동작</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Slide 6: Use cases -->
+  <div class="slide" data-slide="6">
+    <h2>적용 시나리오</h2>
+    <div class="grid-2">
+      <div>
+        <table>
+          <thead><tr><th>시나리오</th><th>적합도</th></tr></thead>
+          <tbody>
+            <tr><td>쿠폰/티켓 선착순 이벤트</td><td><span class="tag tag-green">매우 적합</span></td></tr>
+            <tr><td>한정판 상품 오픈</td><td><span class="tag tag-green">매우 적합</span></td></tr>
+            <tr><td>수강 신청 / 예약 오픈</td><td><span class="tag tag-indigo">적합</span></td></tr>
+            <tr><td>일반 트래픽 관리</td><td><span class="tag tag-indigo">적합</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <h3>기술 스택 (참고)</h3>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px;">
+          <span class="tag tag-rose">Rust (axum)</span>
+          <span class="tag tag-amber">Redis</span>
+          <span class="tag tag-indigo">React + TypeScript</span>
+          <span class="tag tag-green">SSE</span>
+        </div>
+        <p style="font-size:0.95em; color:#64748b; margin-top:20px;">고성능 리버스 프록시 + 멀티 서버 확장 + Admin 대시보드 + 실시간 업데이트</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slide 7: Summary -->
+  <div class="slide slide-title" data-slide="7">
+    <h2 style="font-size:2em; margin-bottom:8px;">정리</h2>
+    <p style="color:#64748b; font-size:1em; margin-bottom: 16px;">Waiting Room이 제공하는 가치</p>
+    <div class="summary-grid">
+      <div class="summary-item">
+        <div class="num" style="font-size:1.4em;">Zero</div>
+        <div class="label">서비스 코드<br>변경</div>
+      </div>
+      <div class="summary-item">
+        <div class="num" style="font-size:1.4em;">Auto</div>
+        <div class="label">스케줄 기반<br>자동 운영</div>
+      </div>
+      <div class="summary-item">
+        <div class="num" style="font-size:1.4em;">FIFO</div>
+        <div class="label">공정한<br>선착순</div>
+      </div>
+      <div class="summary-item">
+        <div class="num">31MB</div>
+        <div class="label">서버당<br>메모리</div>
+      </div>
+      <div class="summary-item">
+        <div class="num">$0</div>
+        <div class="label">추가 라이선스<br>비용</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Navigation -->
+<div class="nav">
+  <button onclick="go(-1)" aria-label="Previous">&#8592;</button>
+  <button onclick="go(1)" aria-label="Next">&#8594;</button>
+</div>
+<div class="page-num" id="pageNum"></div>
+<div class="progress" id="progress"></div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  let cur = 0;
+
+  function show(i) {
+    slides[cur].classList.remove('active');
+    cur = Math.max(0, Math.min(i, slides.length - 1));
+    slides[cur].classList.add('active');
+    document.getElementById('pageNum').textContent = `${cur + 1} / ${slides.length}`;
+    document.getElementById('progress').style.width = `${((cur + 1) / slides.length) * 100}%`;
+  }
+
+  function go(d) { show(cur + d); }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'Enter') { e.preventDefault(); go(1); }
+    if (e.key === 'ArrowLeft' || e.key === 'Backspace') { e.preventDefault(); go(-1); }
+    if (e.key === 'Home') { e.preventDefault(); show(0); }
+    if (e.key === 'End') { e.preventDefault(); show(slides.length - 1); }
+  });
+
+  // Touch support
+  let touchX = 0;
+  document.addEventListener('touchstart', (e) => { touchX = e.touches[0].clientX; });
+  document.addEventListener('touchend', (e) => {
+    const dx = e.changedTouches[0].clientX - touchX;
+    if (Math.abs(dx) > 50) go(dx < 0 ? 1 : -1);
+  });
+
+  show(0);
+</script>
+
+</body>
+</html>
