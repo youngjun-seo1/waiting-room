@@ -150,15 +150,15 @@ export function SchedulesPage() {
     }
   };
 
-  const [qtMaxActive, setQtMaxActive] = useState('10');
-  const [qtTtl, setQtTtl] = useState('30');
+  const [qtMaxActive, setQtMaxActive] = useState('100');
+  const [qtTtl, setQtTtl] = useState('5');
   const [qtDuration, setQtDuration] = useState('5');
   const [qtMessage, setQtMessage] = useState('');
   const [qtError, setQtError] = useState('');
 
   const handleQuickTest = async (overrideMaxActive?: string, overrideTtl?: string, overrideDuration?: string) => {
-    const ma = parseInt(overrideMaxActive ?? qtMaxActive) || 10;
-    const ttl = parseInt(overrideTtl ?? qtTtl) || 30;
+    const ma = parseInt(overrideMaxActive ?? qtMaxActive) || 100;
+    const ttl = parseInt(overrideTtl ?? qtTtl) || 5;
     const dur = parseInt(overrideDuration ?? qtDuration) || 5;
     setQtError('');
     setCreating(true);
@@ -425,39 +425,45 @@ export function SchedulesPage() {
           <div className="bg-green-50 text-green-600 text-sm rounded-lg p-3 mb-4">{qtMessage}</div>
         )}
 
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex items-center gap-4">
           <button
             type="button"
             onClick={() => handleQuickTest()}
             disabled={creating}
-            className="px-4 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 disabled:opacity-50"
+            className="px-5 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 disabled:opacity-50"
           >
             Start Test
           </button>
-          <button
-            type="button"
-            onClick={() => handleQuickTest('10', '5', '5')}
-            disabled={creating}
-            className="px-4 py-2 bg-teal-500 text-white rounded-lg text-sm font-medium hover:bg-teal-600 disabled:opacity-50"
-          >
-            Small (10/5s/5min)
-          </button>
-          <button
-            type="button"
-            onClick={() => handleQuickTest('100', '10', '5')}
-            disabled={creating}
-            className="px-4 py-2 bg-sky-500 text-white rounded-lg text-sm font-medium hover:bg-sky-600 disabled:opacity-50"
-          >
-            Normal (100/10s/5min)
-          </button>
+
+          <div className="w-px h-8 bg-amber-300" />
+
+          <div className="flex gap-2 flex-wrap">
+            <span className="text-xs text-amber-600 font-medium self-center mr-1">Presets</span>
+            <button
+              type="button"
+              onClick={() => handleQuickTest('10', '5', '5')}
+              disabled={creating}
+              className="px-3 py-1.5 bg-teal-500 text-white rounded-lg text-xs font-medium hover:bg-teal-600 disabled:opacity-50"
+            >
+              Small (10/5s/5min)
+            </button>
+            <button
+              type="button"
+              onClick={() => handleQuickTest('100', '10', '5')}
+              disabled={creating}
+              className="px-3 py-1.5 bg-sky-500 text-white rounded-lg text-xs font-medium hover:bg-sky-600 disabled:opacity-50"
+            >
+              Normal (100/10s/5min)
+            </button>
           <button
             type="button"
             onClick={() => handleQuickTest('1000', '20', '10')}
             disabled={creating}
-            className="px-4 py-2 bg-violet-500 text-white rounded-lg text-sm font-medium hover:bg-violet-600 disabled:opacity-50"
+            className="px-3 py-1.5 bg-violet-500 text-white rounded-lg text-xs font-medium hover:bg-violet-600 disabled:opacity-50"
           >
             Large (1000/20s/10min)
           </button>
+          </div>
         </div>
       </div>
     </div>
