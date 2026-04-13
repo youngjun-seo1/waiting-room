@@ -78,30 +78,4 @@ echo "[Queue Status]"
 curl -s "$WR_URL/__wr/status" | jq .
 echo ""
 
-# Phase 2: 순차 입장 모니터링
-echo "[Phase 2] Monitoring queue drain (10 users/~1s)..."
-echo "  Queued users will be admitted as active sessions expire."
-echo ""
-
-for tick in $(seq 1 20); do
-    sleep 1
-    STATUS=$(curl -s "$WR_URL/__wr/status")
-    ACTIVE=$(echo "$STATUS" | jq -r '.active_users // "?"')
-    QUEUE=$(echo "$STATUS" | jq -r '.queue_length // "?"')
-    TIMESTAMP=$(date +%H:%M:%S)
-
-    printf "  [%s] tick=%2d  active=%-4s  queue=%-4s\n" \
-        "$TIMESTAMP" "$tick" "$ACTIVE" "$QUEUE"
-
-    if [ "$QUEUE" = "0" ]; then
-        echo ""
-        echo "  Queue drained!"
-        break
-    fi
-done
-
-echo ""
-echo "[Final Status]"
-curl -s "$WR_URL/__wr/status" | jq .
-echo ""
 echo "=== Test Complete ==="
