@@ -30,6 +30,17 @@ function formatTime(iso: string) {
   return new Date(iso).toLocaleString();
 }
 
+function formatDuration(startIso: string, endIso: string): string {
+  const ms = new Date(endIso).getTime() - new Date(startIso).getTime();
+  if (ms <= 0) return '0min';
+  const totalMin = Math.floor(ms / 60000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (h > 0 && m > 0) return `${h}h ${m}min`;
+  if (h > 0) return `${h}h`;
+  return `${m}min`;
+}
+
 /** "YYYY-MM-DDTHH:MM" for datetime-local input */
 function toLocalInput(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -218,9 +229,9 @@ export function SchedulesPage() {
                         ttl: {s.session_ttl_secs ?? defaultSessionTtl}s{!s.session_ttl_secs && ' (default)'}
                       </span>
                     </div>
-                    <div className="text-xs text-gray-400 mt-1 space-x-3">
-                      <span>Start: {formatTime(s.start_at)}</span>
-                      <span>End: {formatTime(s.end_at)}</span>
+                    <div className="text-xs text-gray-400 mt-1">
+                      <span>{formatTime(s.start_at)} ~ {formatTime(s.end_at)}</span>
+                      <span className="ml-2 text-gray-500 font-medium">({formatDuration(s.start_at, s.end_at)})</span>
                     </div>
                     {s.origin_url && (
                       <div className="text-xs text-gray-400 mt-0.5 truncate">
