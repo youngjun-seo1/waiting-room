@@ -172,8 +172,8 @@ origin_url = "http://my-origin:3000"
 스케줄 기능으로 자동화. Admin SPA 또는 Admin API로 등록:
 
 **Admin SPA:**
-1. Schedules 페이지에서 Name, Start At, End At, Max Active Users 입력
-2. Create Schedule 버튼 클릭
+1. Schedules 페이지에서 Name, Start At, End At, Max Active Users 입력 후 Create Schedule 클릭
+2. 또는 Quick Test 카드에서 프리셋 버튼 (Small/Normal/Large) 클릭으로 즉시 테스트 스케줄 생성
 3. 스케줄이 자동으로 start_at에 대기실 ON, end_at에 대기실 OFF
 
 **Admin API:**

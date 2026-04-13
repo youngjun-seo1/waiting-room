@@ -80,15 +80,17 @@ waiting-room/
 │   │   │   ├── SchedulesPage.tsx  # 스케줄 CRUD
 │   │   │   └── Login.tsx      # API Key 인증
 │   │   └── components/
-│   │       ├── QueueVisualizer.tsx  # 큐 시각화
-│   │       ├── StatusBadge.tsx     # 상태 뱃지
-│   │       ├── Settings.tsx        # 런타임 설정 변경
+│   │       ├── QueueVisualizer.tsx  # 큐 플로우 시각화 (Canvas 애니메이션)
+│   │       ├── Layout.tsx          # 헤더 + 네비게이션 레이아웃
 │   │       └── Schedules.tsx       # 스케줄 컴포넌트
 │   └── package.json
 ├── examples/
 │   ├── origin.rs              # 테스트용 오리진 서버
 │   ├── bench.rs               # 단일 서버 벤치마크
 │   └── bench_multi.rs         # 멀티 서버 벤치마크 (모니터링 포함)
+├── tests/
+│   ├── load_test.sh           # 1000명 동시 접속 부하 테스트
+│   └── stress_test.sh         # 스트레스 테스트
 └── docs/
     ├── 01-design.md           # 설계 문서 (이 파일)
     ├── 02-implementation.md   # 구현 문서
@@ -198,9 +200,9 @@ Reaper/Admin → PUBLISH wr:notify → Redis Pub/Sub
 React + TypeScript + Vite 기반 관리 대시보드. Waiting Room 서버와 독립적으로 실행.
 
 **주요 기능:**
-- **Dashboard**: 실시간 큐 상태 모니터링 (활성 사용자, 대기열 길이, 평균 활성 시간) + 활성 스케줄 정보 표시
-- **Schedules**: 스케줄 등록/삭제, phase 실시간 표시 (name, start_at, end_at, max_active_users, origin_url)
-- **Settings**: 런타임 설정 변경 (max_active_users, session_ttl 등)
+- **Dashboard**: 실시간 큐 상태 모니터링 + 큐 플로우 시각화 (Canvas 애니메이션) + ON AIR/STANDBY 상태 표시 + 활성/최근/다음 스케줄 표시
+- **Schedules**: 스케줄 등록/삭제, phase 실시간 표시, 기간 표시 (시작~종료 + 계산된 duration)
+- **Quick Test**: 별도 카드로 분리된 빠른 테스트 생성 (Max Active Users, TTL, Duration 커스텀 + Small/Normal/Large 프리셋)
 - 2초 간격 폴링으로 상태 자동 갱신
 
 **실행:**

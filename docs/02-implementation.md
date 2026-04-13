@@ -256,17 +256,16 @@ React + TypeScript + Vite 기반 관리 대시보드. Waiting Room 서버의 Adm
 
 | 페이지 | 경로 | 기능 |
 |--------|------|------|
-| Login | `/` | API Key 입력, localStorage 저장 |
-| Dashboard | `/dashboard` | 실시간 큐 상태, 설정 변경, enable/disable 토글 |
-| Schedules | `/schedules` | 스케줄 등록/삭제, phase 실시간 표시 |
+| Login | `/` | Server URL + API Key 입력 |
+| Dashboard | `/dashboard` | 실시간 큐 상태 모니터링, 큐 플로우 시각화, ON AIR/STANDBY 상태, 활성/최근/다음 스케줄 표시 |
+| Schedules | `/schedules` | 스케줄 등록/삭제, phase 실시간 표시, 기간 표시 + Quick Test 카드 (커스텀 옵션 + Small/Normal/Large 프리셋) |
 
 ### 주요 컴포넌트
 
 | 컴포넌트 | 역할 |
 |---------|------|
-| `QueueVisualizer` | 활성 사용자/대기열 시각화 (애니메이션) |
-| `StatusBadge` | Enabled/Disabled 상태 + Max Active + TTL 표시 |
-| `Settings` | max_active_users, session_ttl 런타임 변경 |
+| `QueueVisualizer` | 큐 플로우 시각화 (Canvas 애니메이션, 입장/대기/활성/퇴장 상태별 색상) |
+| `Layout` | 헤더 + Dashboard/Schedules 네비게이션 탭 + 로그아웃 |
 | `Schedules` | 스케줄 목록 + 인라인 등록 폼 |
 
 ### 실행
@@ -280,7 +279,7 @@ npm run build     # 프로덕션 빌드 (dist/)
 
 ---
 
-## 5. 의존성
+## 6. 의존성
 
 | Crate | Version | 용도 |
 |-------|---------|------|

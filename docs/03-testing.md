@@ -99,9 +99,29 @@ curl -s http://localhost:8081/__wr/status
 
 ---
 
-## 3. 성능 테스트
+## 3. 셸 스크립트 테스트
 
-### 3.1 단일 서버 In-memory vs Redis
+### 3.1 부하 테스트 (`tests/load_test.sh`)
+
+1000명 동시 접속 후 결과를 분석하는 테스트. Phase 1에서 동시 요청을 보내고 입장/대기/에러 수를 집계한 뒤 큐 상태를 확인.
+
+```bash
+./tests/load_test.sh
+```
+
+### 3.2 스트레스 테스트 (`tests/stress_test.sh`)
+
+점진적으로 동접 수를 늘려가며 (1000 → 5000 → 10000 → 20000 → 50000) 서버 한계를 측정. 각 단계마다 응답 시간, 처리량(req/s), 서버 메모리를 출력.
+
+```bash
+./tests/stress_test.sh
+```
+
+---
+
+## 4. 성능 테스트
+
+### 4.1 단일 서버 In-memory vs Redis
 
 ```bash
 # In-memory
@@ -127,7 +147,7 @@ cargo run --release --example bench
 - 5,000명: Redis가 에러 0으로 더 안정적 (Lua 원자성)
 - 50,000명: Redis가 오히려 더 빠름 (RwLock 경합 vs Redis 직렬화)
 
-### 3.2 멀티 서버 스케일링 (Redis, 4서버)
+### 4.2 멀티 서버 스케일링 (Redis, 4서버)
 
 ```bash
 # 4대 서버 기동
@@ -166,7 +186,7 @@ cargo run --release --example bench_multi
 | 5,000 | 40,366 | 37MB |
 | 10,000 | 48,586 | 37MB |
 
-### 3.3 스케일링 비교 (1서버 vs 2서버 vs 4서버)
+### 4.3 스케일링 비교 (1서버 vs 2서버 vs 4서버)
 
 | 동접 | 1서버 에러 | 2서버 에러 | 4서버 에러 |
 |------|----------|----------|----------|
@@ -178,15 +198,15 @@ cargo run --release --example bench_multi
 
 ---
 
-## 4. 주요 성능 분석
+## 5. 주요 성능 분석
 
-### 4.1 병목 지점
+### 5.1 병목 지점
 
 - **10,000명 이하**: 서버 CPU 30%, 메모리 30MB — 여유 충분
 - **20,000명+**: 로컬 TCP 포트 고갈이 주 에러 원인 (서버가 아닌 벤치 클라이언트 한계)
 - **Redis**: 피크 48,586 ops/s — 단일 인스턴스 한계(~100K ops/s)의 절반
 
-### 4.2 최적화 포인트
+### 5.2 최적화 포인트
 
 | 항목 | 현재 값 | 근거 |
 |------|--------|------|
@@ -195,7 +215,7 @@ cargo run --release --example bench_multi
 | SSE keep-alive | axum 기본값 | 15초 간격 ping |
 | 벤치 배치 크기 | 2,000 | fd 고갈 방지, 안정적 측정 |
 
-### 4.3 프로덕션 확장 시 기대 성능
+### 5.3 프로덕션 확장 시 기대 성능
 
 - **서버 N대**: 처리량 선형 증가 (현재 병목은 클라이언트 쪽)
 - **Redis Cluster**: ops/s 한계 제거
@@ -204,7 +224,7 @@ cargo run --release --example bench_multi
 
 ---
 
-## 5. 상태 동기화 검증
+## 6. 상태 동기화 검증
 
 모든 벤치마크에서 멀티 서버 상태 일관성을 검증:
 
@@ -218,7 +238,7 @@ S0: a=10 q=9990  S1: a=10 q=9990  S2: a=10 q=9990  S3: a=10 q=9990
 
 ---
 
-## 6. 테스트 환경
+## 7. 테스트 환경
 
 | 항목 | 값 |
 |------|-----|
@@ -232,9 +252,9 @@ S0: a=10 q=9990  S1: a=10 q=9990  S2: a=10 q=9990  S3: a=10 q=9990
 
 ---
 
-## 7. 스케줄 기능 테스트
+## 8. 스케줄 기능 테스트
 
-### 7.1 테스트 시나리오
+### 8.1 테스트 시나리오
 
 스케줄을 등록하여 start_at → end_at 라이프사이클 검증.
 
@@ -252,7 +272,7 @@ curl -X POST -H "X-Api-Key: ..." -H "Content-Type: application/json" \
   }' http://localhost:8080/__wr/admin/schedules
 ```
 
-### 7.2 Phase별 검증 결과
+### 8.2 Phase별 검증 결과
 
 | Phase | 시점 | 상태 | 사용자 접속 결과 | 검증 |
 |-------|------|------|-----------------|------|
@@ -260,7 +280,7 @@ curl -X POST -H "X-Api-Key: ..." -H "Content-Type: application/json" \
 | `active` | start_at 도달 | enabled=true | 대기실 ON, 순차 입장 시작 | OK |
 | `ended` | end_at 도달 | enabled=false | 대기열 flush, SSE "closed" 이벤트, 종료 안내 | OK |
 
-### 7.3 Active phase 상세
+### 8.3 Active phase 상세
 
 ```
 start_at 도달 시:
@@ -271,7 +291,7 @@ start_at 도달 시:
 - TTL 만료 → 다음 사용자 자동 입장
 ```
 
-### 7.4 Ended phase 상세
+### 8.4 Ended phase 상세
 
 ```
 end_at 도달 시:
@@ -282,7 +302,7 @@ end_at 도달 시:
 - 새 접속 시 "이벤트 참여 시간이 아닙니다" 페이지 표시
 ```
 
-### 7.5 운영 흐름 예시
+### 8.5 운영 흐름 예시
 
 ```
 10:00 start_at → 대기실 ON, 대기열에서 순차 입장 시작
