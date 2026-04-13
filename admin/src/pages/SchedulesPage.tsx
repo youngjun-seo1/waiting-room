@@ -139,26 +139,35 @@ export function SchedulesPage() {
     }
   };
 
-  const handleQuickTest = async () => {
-    setError('');
+  const [qtMaxActive, setQtMaxActive] = useState('10');
+  const [qtTtl, setQtTtl] = useState('30');
+  const [qtDuration, setQtDuration] = useState('5');
+  const [qtMessage, setQtMessage] = useState('');
+  const [qtError, setQtError] = useState('');
+
+  const handleQuickTest = async (overrideMaxActive?: string, overrideTtl?: string, overrideDuration?: string) => {
+    const ma = parseInt(overrideMaxActive ?? qtMaxActive) || 10;
+    const ttl = parseInt(overrideTtl ?? qtTtl) || 30;
+    const dur = parseInt(overrideDuration ?? qtDuration) || 5;
+    setQtError('');
     setCreating(true);
     try {
       const now = new Date();
-      const end = new Date(now.getTime() + 5 * 60 * 1000);
+      const end = new Date(now.getTime() + dur * 60 * 1000);
       const data: Record<string, unknown> = {
-        name: `Quick Test`,
+        name: `Quick Test (${ma} users, ${ttl}s ttl, ${dur}min)`,
         start_at: now.toISOString(),
         end_at: end.toISOString(),
-        max_active_users: parseInt(defaultMaxActive),
-        session_ttl_secs: parseInt(defaultSessionTtl),
+        max_active_users: ma,
+        session_ttl_secs: ttl,
       };
-      data.origin_url = defaultOriginUrl;
+      if (defaultOriginUrl) data.origin_url = defaultOriginUrl;
       await api.createSchedule(data);
-      setMessage('테스트 스케줄이 생성되었습니다 (5분간).');
-      setTimeout(() => setMessage(''), 3000);
+      setQtMessage(`테스트 스케줄 생성: ${ma}명, TTL ${ttl}초, ${dur}분간`);
+      setTimeout(() => setQtMessage(''), 3000);
       fetchSchedules();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to create quick test');
+      setQtError(e instanceof Error ? e.message : 'Failed to create quick test');
     } finally {
       setCreating(false);
     }
@@ -352,24 +361,94 @@ export function SchedulesPage() {
           <div className="bg-green-50 text-green-600 text-sm rounded-lg p-3 mb-4">{message}</div>
         )}
 
-        <div className="flex gap-3">
+        <button
+          type="submit"
+          disabled={creating}
+          className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+        >
+          {creating ? 'Creating...' : 'Create Schedule'}
+        </button>
+      </form>
+
+      {/* Quick Test Card */}
+      <div className="bg-amber-50 rounded-xl border border-amber-200 p-6">
+        <h2 className="text-lg font-semibold text-amber-800 mb-4">Quick Test</h2>
+
+        <div className="grid grid-cols-3 gap-4 mb-4">
+          <div>
+            <label className="block text-sm text-amber-700 mb-1">Max Active Users</label>
+            <input
+              type="number"
+              value={qtMaxActive}
+              onChange={(e) => setQtMaxActive(e.target.value)}
+              min="1"
+              className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-amber-700 mb-1">Session TTL (초)</label>
+            <input
+              type="number"
+              value={qtTtl}
+              onChange={(e) => setQtTtl(e.target.value)}
+              min="1"
+              className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-amber-700 mb-1">Duration (분)</label>
+            <input
+              type="number"
+              value={qtDuration}
+              onChange={(e) => setQtDuration(e.target.value)}
+              min="1"
+              className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none"
+            />
+          </div>
+        </div>
+
+        {qtError && (
+          <div className="bg-red-50 text-red-600 text-sm rounded-lg p-3 mb-4">{qtError}</div>
+        )}
+        {qtMessage && (
+          <div className="bg-green-50 text-green-600 text-sm rounded-lg p-3 mb-4">{qtMessage}</div>
+        )}
+
+        <div className="flex gap-2 flex-wrap">
           <button
-            type="submit"
+            type="button"
+            onClick={() => handleQuickTest()}
             disabled={creating}
-            className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+            className="px-4 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 disabled:opacity-50"
           >
-            {creating ? 'Creating...' : 'Create Schedule'}
+            Start Test
           </button>
           <button
             type="button"
-            onClick={handleQuickTest}
+            onClick={() => handleQuickTest('10', '5', '5')}
             disabled={creating}
-            className="px-6 py-2.5 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 disabled:opacity-50"
+            className="px-4 py-2 bg-teal-500 text-white rounded-lg text-sm font-medium hover:bg-teal-600 disabled:opacity-50"
           >
-            Quick Test (5min)
+            Small (10/5s/5min)
+          </button>
+          <button
+            type="button"
+            onClick={() => handleQuickTest('100', '10', '5')}
+            disabled={creating}
+            className="px-4 py-2 bg-sky-500 text-white rounded-lg text-sm font-medium hover:bg-sky-600 disabled:opacity-50"
+          >
+            Normal (100/10s/5min)
+          </button>
+          <button
+            type="button"
+            onClick={() => handleQuickTest('1000', '20', '10')}
+            disabled={creating}
+            className="px-4 py-2 bg-violet-500 text-white rounded-lg text-sm font-medium hover:bg-violet-600 disabled:opacity-50"
+          >
+            Large (1000/20s/10min)
           </button>
         </div>
-      </form>
+      </div>
     </div>
   );
 }
