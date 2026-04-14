@@ -22,12 +22,13 @@ pub fn spawn_reaper(state: Arc<AppState>) {
             if let Some(pool) = &state.redis_pool {
                 match pool.get().await {
                     Ok(mut conn) => {
+                        let lock_ttl = interval_secs + 1;
                         let acquired: Option<String> = cmd("SET")
                             .arg("wr:reaper:lock")
                             .arg(&server_id)
                             .arg("NX")
                             .arg("EX")
-                            .arg(10)
+                            .arg(lock_ttl)
                             .query_async(&mut *conn)
                             .await
                             .ok()

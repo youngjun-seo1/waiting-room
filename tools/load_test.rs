@@ -18,7 +18,7 @@ struct Args {
     concurrency: usize,
 
     /// SSE timeout in seconds
-    #[arg(long, default_value_t = 120)]
+    #[arg(long, default_value_t = 1800)]
     sse_timeout: u64,
 
     /// Waiting room URL

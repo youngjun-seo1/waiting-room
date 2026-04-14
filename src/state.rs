@@ -25,7 +25,7 @@ pub struct AppState {
 impl AppState {
     pub fn new(config: Config, queue: Arc<dyn QueueBackend>, redis_pool: Option<Pool>) -> Self {
         let secret = generate_hmac_secret();
-        let (sse_tx, _) = broadcast::channel(128);
+        let (sse_tx, _) = broadcast::channel(1024);
         Self {
             config: RwLock::new(config),
             queue,
