@@ -12,33 +12,6 @@ pub fn create_http_client() -> HttpClient {
     Client::builder(TokioExecutor::new()).build_http()
 }
 
-/// Returns true if the origin host differs from the request host.
-/// Same domain → reverse proxy, different domain → redirect.
-pub fn should_redirect(origin_url: &str, req_host: Option<&str>) -> bool {
-    let origin_host = origin_url
-        .split("://")
-        .nth(1)
-        .unwrap_or(origin_url)
-        .split('/')
-        .next()
-        .unwrap_or("")
-        .split(':')
-        .next()
-        .unwrap_or("");
-
-    let req_host = req_host
-        .unwrap_or("")
-        .split(':')
-        .next()
-        .unwrap_or("");
-
-    if origin_host.is_empty() || req_host.is_empty() {
-        return false;
-    }
-
-    origin_host != req_host
-}
-
 pub async fn forward_request(
     state: &Arc<AppState>,
     req: axum::extract::Request,

@@ -9,7 +9,6 @@ use std::sync::Arc;
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::BroadcastStream;
 
-use crate::proxy::should_redirect;
 use crate::queue::SessionId;
 use crate::state::AppState;
 
@@ -81,13 +80,7 @@ pub async fn sse_handler(
     };
 
     let origin_url = state.config.read().origin_url.clone();
-    let req_host = req.headers().get(header::HOST)
-        .and_then(|v| v.to_str().ok());
-    let redirect_url = if should_redirect(&origin_url, req_host) {
-        Some(origin_url)
-    } else {
-        None
-    };
+    let redirect_url = Some(origin_url);
 
     // Send initial state immediately on connect
     let initial_event = if state.queue.is_active(&session_id).await {
