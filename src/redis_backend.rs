@@ -149,7 +149,13 @@ impl QueueBackend for RedisBackend {
         max_active: u32,
         ttl_secs: u64,
     ) -> GateResult {
-        let mut conn = self.pool.get().await.expect("redis connection");
+        let mut conn = match self.pool.get().await {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::error!("redis connection failed in gate_check: {}", e);
+                return GateResult::Enqueued { position: 0, total: 0 };
+            }
+        };
         let id_str = id.map(|i| session_id_str(&i)).unwrap_or_default();
         let new_id_str = session_id_str(&new_id);
 

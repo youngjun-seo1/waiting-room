@@ -111,18 +111,22 @@ macOS 기본 설정으로는 동시 연결 수가 제한됩니다. 테스트 전
 # TCP listen backlog 상향 (기본값 128 → 8192)
 sudo sysctl -w kern.ipc.somaxconn=8192
 
+# 임시 포트 범위 확장 (기본값 49152~65535 = 16,384개 → 10000~65535 = 55,536개)
+sudo sysctl -w net.inet.ip.portrange.first=10000
+
 # 파일 디스크립터 제한 상향 (기본값 256 → 65536)
 sudo launchctl limit maxfiles 65536 200000
 ```
 
-> 두 명령 모두 재부팅 시 초기화됩니다. 영구 적용은 `/etc/sysctl.conf`와 `/Library/LaunchDaemons/limit.maxfiles.plist`를 참고.
+> 세 명령 모두 재부팅 시 초기화됩니다. 영구 적용은 `/etc/sysctl.conf`와 `/Library/LaunchDaemons/limit.maxfiles.plist`를 참고.
 
 설정 변경 후 **서버와 터미널을 모두 재시작**해야 적용됩니다. 확인:
 
 ```bash
-sysctl kern.ipc.somaxconn     # → 8192
-launchctl limit maxfiles       # → 65536  unlimited
-ulimit -n                      # → 65536 (터미널 재시작 필요)
+sysctl kern.ipc.somaxconn              # → 8192
+sysctl net.inet.ip.portrange.first     # → 10000
+launchctl limit maxfiles                # → 65536  unlimited
+ulimit -n                               # → 65536 (터미널 재시작 필요)
 ```
 
 ### 3.1 시나리오 부하 테스트 (`load_test`)
@@ -225,6 +229,7 @@ Hold:      60s
 |------|------|------|
 | peak이 ~245에서 멈춤 | `ulimit -n` 256 (macOS 기본) | `ulimit -n 65536` 또는 `run_*.sh` 사용 |
 | "error sending request" 다수 | `kern.ipc.somaxconn` 128 | `sudo sysctl -w kern.ipc.somaxconn=8192` |
+| "Can't assign requested address" | 임시 포트 고갈 (기본 16,384개) | `sudo sysctl -w net.inet.ip.portrange.first=10000` |
 | "Waiting room is disabled" | 활성 스케줄 없음 | Admin에서 스케줄 생성 |
 | 서버 변경 후에도 동일 증상 | 서버 미재시작 (이전 프로세스 FD 제한 유지) | 서버 재시작 |
 

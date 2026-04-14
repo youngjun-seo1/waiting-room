@@ -4,6 +4,12 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# macOS 튜닝 (부하 테스트 시 필요, sudo 필요)
+# 아래 명령이 미적용 시 대규모 동시 연결에서 에러 발생:
+#   sudo sysctl -w kern.ipc.somaxconn=8192              # TCP backlog (기본 128)
+#   sudo sysctl -w net.inet.ip.portrange.first=10000    # 임시 포트 범위 확장 (기본 49152)
+#   sudo launchctl limit maxfiles 65536 200000           # FD 제한 (기본 256)
+
 # 파일 디스크립터 제한 상향 (SSE 동시 연결에 필요, macOS 기본값 256은 부족)
 ulimit -n 65536
 echo "ulimit -n: $(ulimit -n)"
