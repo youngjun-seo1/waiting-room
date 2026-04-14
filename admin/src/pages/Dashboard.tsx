@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { usePolling } from '../hooks/usePolling';
 import { QueueVisualizer } from '../components/QueueVisualizer';
@@ -57,6 +57,86 @@ function formatRange(startIso: string, endIso: string) {
     return `${start.toLocaleDateString()} ${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ~ ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
   }
   return `${formatTime(startIso)} ~ ${formatTime(endIso)}`;
+}
+
+function EditableField({ label, value, onSave, onAfterSave, type = 'number' }: {
+  label: string;
+  value: string | number | null;
+  onSave: (v: string) => Promise<void>;
+  onAfterSave?: () => void;
+  type?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(value ?? ''));
+  const [saving, setSaving] = useState(false);
+  const [fieldError, setFieldError] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!editing) setDraft(String(value ?? ''));
+  }, [value, editing]);
+
+  useEffect(() => {
+    if (editing) inputRef.current?.focus();
+  }, [editing]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setFieldError('');
+    try {
+      await onSave(draft);
+      setEditing(false);
+      onAfterSave?.();
+    } catch (e) {
+      setFieldError(e instanceof Error ? e.message : 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!editing) {
+    return (
+      <span
+        className="cursor-pointer hover:bg-indigo-100 px-1 rounded transition-colors"
+        title="Click to edit"
+        onClick={() => setEditing(true)}
+      >
+        {label}: {value ?? 'default'}
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className="text-indigo-500">{label}:</span>
+      <input
+        ref={inputRef}
+        type={type}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') handleSave();
+          if (e.key === 'Escape') { setEditing(false); setFieldError(''); }
+        }}
+        className={`w-24 px-1 py-0 text-xs border rounded bg-white focus:outline-none focus:ring-1 ${fieldError ? 'border-red-400 focus:ring-red-400' : 'border-indigo-300 focus:ring-indigo-400'}`}
+        disabled={saving}
+      />
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="text-[10px] px-1.5 py-0.5 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50"
+      >
+        {saving ? '...' : 'OK'}
+      </button>
+      <button
+        onClick={() => { setEditing(false); setFieldError(''); }}
+        className="text-[10px] px-1 py-0.5 text-gray-500 hover:text-gray-700"
+      >
+        Cancel
+      </button>
+      {fieldError && <span className="text-[10px] text-red-500">{fieldError}</span>}
+    </span>
+  );
 }
 
 export function Dashboard() {
@@ -120,16 +200,42 @@ const [activeSchedule, setActiveSchedule] = useState<Schedule | null>(null);
             </span>
             <span className="text-sm font-semibold text-indigo-900">{activeSchedule.name}</span>
             <span className="text-xs text-indigo-400">#{activeSchedule.id}</span>
+            <button
+              className="ml-auto px-2.5 py-1 text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
+              onClick={async () => {
+                if (confirm('스케줄을 즉시 종료하시겠습니까?')) {
+                  try {
+                    await api.stopSchedule(activeSchedule.id);
+                  } catch (e) {
+                    setError(e instanceof Error ? e.message : 'Failed to stop schedule');
+                  }
+                }
+              }}
+            >
+              Stop
+            </button>
           </div>
           <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-indigo-700">
             <span>{formatRange(activeSchedule.start_at, activeSchedule.end_at)}</span>
-            {activeSchedule.max_active_users && (
-              <span>Max Active: {activeSchedule.max_active_users}</span>
-            )}
-            {activeSchedule.session_ttl_secs && (
-              <span>TTL: {activeSchedule.session_ttl_secs}s</span>
-            )}
-            <span>Origin: {activeSchedule.origin_url ?? 'null'}</span>
+            <EditableField
+              label="Max Active"
+              value={activeSchedule.max_active_users}
+              onSave={async (v) => { await api.patchConfig({ max_active_users: Number(v) }); }}
+              onAfterSave={fetchAll}
+            />
+            <EditableField
+              label="TTL"
+              value={activeSchedule.session_ttl_secs}
+              onSave={async (v) => { await api.patchConfig({ session_ttl_secs: Number(v) }); }}
+              onAfterSave={fetchAll}
+            />
+            <EditableField
+              label="Origin"
+              value={activeSchedule.origin_url}
+              type="text"
+              onSave={async (v) => { await api.patchConfig({ origin_url: v }); }}
+              onAfterSave={fetchAll}
+            />
           </div>
           {activeSchedule.stats && (
             <div className="grid grid-cols-4 gap-2 mt-3 pt-3 border-t border-indigo-200">

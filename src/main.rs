@@ -1,4 +1,5 @@
 mod admin;
+mod archive_store;
 mod backend;
 mod config;
 mod middleware;
@@ -69,7 +70,7 @@ async fn main() -> anyhow::Result<()> {
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
-        .allow_methods([Method::GET, Method::PUT, Method::POST, Method::DELETE, Method::OPTIONS])
+        .allow_methods([Method::GET, Method::PUT, Method::POST, Method::DELETE, Method::PATCH, Method::OPTIONS])
         .allow_headers([header::CONTENT_TYPE, header::HeaderName::from_static("x-api-key")]);
 
     let app = Router::new()
@@ -80,8 +81,18 @@ async fn main() -> anyhow::Result<()> {
         .layer(cors)
         .with_state(app_state);
 
-    let listener = tokio::net::TcpListener::bind(listen_addr).await?;
-    info!("Listening on {}", listen_addr);
+    // TCP backlog를 높게 설정 (OS 기본값 128은 동시 접속에 부족)
+    let socket = socket2::Socket::new(
+        if listen_addr.is_ipv6() { socket2::Domain::IPV6 } else { socket2::Domain::IPV4 },
+        socket2::Type::STREAM,
+        None,
+    )?;
+    socket.set_reuse_address(true)?;
+    socket.bind(&listen_addr.into())?;
+    socket.listen(8192)?;  // backlog: OS가 허용하는 최대값으로 clamp됨
+    socket.set_nonblocking(true)?;
+    let listener = tokio::net::TcpListener::from_std(socket.into())?;
+    info!("Listening on {} (backlog: 8192)", listen_addr);
     axum::serve(listener, app).await?;
 
     Ok(())

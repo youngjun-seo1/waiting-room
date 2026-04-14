@@ -42,18 +42,25 @@ fn default_page_title() -> String {
 pub struct AdvancedConfig {
     #[serde(default = "default_reaper_interval")]
     pub reaper_interval_secs: u64,
+    #[serde(default = "default_schedule_retention")]
+    pub schedule_retention_secs: u64,
 }
 
 impl Default for AdvancedConfig {
     fn default() -> Self {
         Self {
             reaper_interval_secs: default_reaper_interval(),
+            schedule_retention_secs: default_schedule_retention(),
         }
     }
 }
 
 fn default_reaper_interval() -> u64 {
     5
+}
+
+fn default_schedule_retention() -> u64 {
+    86400 // 24 hours
 }
 
 impl Config {

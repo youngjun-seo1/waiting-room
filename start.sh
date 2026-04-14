@@ -4,8 +4,33 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-MODE="${1:-local}"
+# 파일 디스크립터 제한 상향 (SSE 동시 연결에 필요, macOS 기본값 256은 부족)
+ulimit -n 65536
+echo "ulimit -n: $(ulimit -n)"
+
+# 사용법: ./start.sh [local|redis] [--debug]
+MODE="local"
+BUILD="release"
+
+for arg in "$@"; do
+  case "$arg" in
+    redis) MODE="redis" ;;
+    local) MODE="local" ;;
+    --debug) BUILD="debug" ;;
+  esac
+done
+
 REDIS_URL="${WR_REDIS_URL:-redis://127.0.0.1:6379}"
+
+if [ "$BUILD" = "release" ]; then
+  CARGO_RUN="run --release --bin waiting-room"
+  CARGO_ORIGIN="run --release --example origin"
+  BUILD_LABEL="release"
+else
+  CARGO_RUN="run --bin waiting-room"
+  CARGO_ORIGIN="run --example origin"
+  BUILD_LABEL="debug (hot reload)"
+fi
 
 PIDS=()
 
@@ -18,29 +43,55 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# 1) Origin server (port 3000) - hot reload on examples/ changes
-echo "==> Starting origin server (port 3000, hot reload)..."
-cargo watch -w examples/ -x "run --example origin" &
-PIDS+=($!)
-sleep 3
-
-if [ "$MODE" = "redis" ]; then
-  # Redis mode: 2 WR servers - hot reload on src/ changes
-  echo "==> Starting waiting-room server #1 (port 8080, Redis, hot reload)..."
-  WR_REDIS_URL="$REDIS_URL" WR_LISTEN_ADDR="0.0.0.0:8080" cargo watch -w src/ -w config.toml -x "run -- config.toml" &
+if [ "$BUILD" = "debug" ]; then
+  # Debug: cargo watch로 hot reload
+  echo "==> Starting origin server (port 3000, hot reload)..."
+  cargo watch -w examples/ -x "run --example origin" &
   PIDS+=($!)
   sleep 3
 
-  echo "==> Starting waiting-room server #2 (port 8081, Redis, hot reload)..."
-  WR_REDIS_URL="$REDIS_URL" WR_LISTEN_ADDR="0.0.0.0:8081" cargo watch -w src/ -w config.toml -x "run -- config.toml" &
-  PIDS+=($!)
-  sleep 3
+  if [ "$MODE" = "redis" ]; then
+    echo "==> Starting waiting-room server #1 (port 8080, Redis, hot reload)..."
+    WR_REDIS_URL="$REDIS_URL" WR_LISTEN_ADDR="0.0.0.0:8080" cargo watch -w src/ -w config.toml -x "run --bin waiting-room -- config.toml" &
+    PIDS+=($!)
+    sleep 3
+
+    echo "==> Starting waiting-room server #2 (port 8081, Redis, hot reload)..."
+    WR_REDIS_URL="$REDIS_URL" WR_LISTEN_ADDR="0.0.0.0:8081" cargo watch -w src/ -w config.toml -x "run --bin waiting-room -- config.toml" &
+    PIDS+=($!)
+    sleep 3
+  else
+    echo "==> Starting waiting-room server (port 8080, hot reload)..."
+    cargo watch -w src/ -w config.toml -x "run --bin waiting-room -- config.toml" &
+    PIDS+=($!)
+    sleep 3
+  fi
 else
-  # Local mode: 1 WR server (in-memory) - hot reload on src/ changes
-  echo "==> Starting waiting-room server (port 8080, hot reload)..."
-  cargo watch -w src/ -w config.toml -x "run -- config.toml" &
+  # Release: 빌드 후 직접 실행
+  echo "==> Building release..."
+  cargo build --release --bin waiting-room --example origin 2>&1
+
+  echo "==> Starting origin server (port 3000)..."
+  cargo $CARGO_ORIGIN &
   PIDS+=($!)
-  sleep 3
+  sleep 1
+
+  if [ "$MODE" = "redis" ]; then
+    echo "==> Starting waiting-room server #1 (port 8080, Redis)..."
+    WR_REDIS_URL="$REDIS_URL" WR_LISTEN_ADDR="0.0.0.0:8080" cargo $CARGO_RUN -- config.toml &
+    PIDS+=($!)
+    sleep 1
+
+    echo "==> Starting waiting-room server #2 (port 8081, Redis)..."
+    WR_REDIS_URL="$REDIS_URL" WR_LISTEN_ADDR="0.0.0.0:8081" cargo $CARGO_RUN -- config.toml &
+    PIDS+=($!)
+    sleep 1
+  else
+    echo "==> Starting waiting-room server (port 8080)..."
+    cargo $CARGO_RUN -- config.toml &
+    PIDS+=($!)
+    sleep 1
+  fi
 fi
 
 # Admin SPA
@@ -52,6 +103,7 @@ cd ..
 
 echo ""
 echo "============================================"
+echo "  Build:        $BUILD_LABEL"
 if [ "$MODE" = "redis" ]; then
   echo "  Mode:         Redis ($REDIS_URL)"
   echo "  Origin:       http://localhost:3000"

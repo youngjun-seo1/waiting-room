@@ -274,6 +274,24 @@ pub fn spawn_scheduler(state: Arc<AppState>) {
             if schedule_state.active_schedule_id.is_some() && tick % 10 == 0 {
                 crate::schedule_store::save_all_schedules(&state).await;
             }
+
+            // Archive and remove expired ended schedules (every 60 seconds)
+            if tick % 60 == 0 {
+                let retention_secs = state.config.read().advanced.schedule_retention_secs;
+                let cutoff = Utc::now() - chrono::Duration::seconds(retention_secs as i64);
+                let expired: Vec<Schedule> = {
+                    let schedules = state.schedules.read();
+                    schedules.iter()
+                        .filter(|s| s.phase == SchedulePhase::Ended && s.end_at < cutoff)
+                        .cloned()
+                        .collect()
+                };
+                for schedule in &expired {
+                    crate::archive_store::archive_schedule(&state, schedule).await;
+                    crate::schedule_store::remove_schedule(&state, &schedule.id).await;
+                    info!(schedule_id = %schedule.id, name = %schedule.name, "schedule archived and removed");
+                }
+            }
         }
     });
 }

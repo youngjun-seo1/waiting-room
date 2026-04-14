@@ -99,23 +99,134 @@ curl -s http://localhost:8081/__wr/status
 
 ---
 
-## 3. 셸 스크립트 테스트
+## 3. 부하 테스트 (Rust)
 
-### 3.1 부하 테스트 (`tests/load_test.sh`)
+SSE 기반 부하 테스트 도구. tokio 비동기 런타임으로 수만 개의 동시 연결을 단일 프로세스에서 처리.
 
-1000명 동시 접속 후 결과를 분석하는 테스트. Phase 1에서 동시 요청을 보내고 입장/대기/에러 수를 집계한 뒤 큐 상태를 확인.
+### 3.0 사전 준비 (macOS)
 
-```bash
-./tests/load_test.sh
-```
-
-### 3.2 스트레스 테스트 (`tests/stress_test.sh`)
-
-점진적으로 동접 수를 늘려가며 (1000 → 5000 → 10000 → 20000 → 50000) 서버 한계를 측정. 각 단계마다 응답 시간, 처리량(req/s), 서버 메모리를 출력.
+macOS 기본 설정으로는 동시 연결 수가 제한됩니다. 테스트 전 아래 설정이 필요합니다.
 
 ```bash
-./tests/stress_test.sh
+# TCP listen backlog 상향 (기본값 128 → 8192)
+sudo sysctl -w kern.ipc.somaxconn=8192
+
+# 파일 디스크립터 제한 상향 (기본값 256 → 65536)
+sudo launchctl limit maxfiles 65536 200000
 ```
+
+> 두 명령 모두 재부팅 시 초기화됩니다. 영구 적용은 `/etc/sysctl.conf`와 `/Library/LaunchDaemons/limit.maxfiles.plist`를 참고.
+
+설정 변경 후 **서버와 터미널을 모두 재시작**해야 적용됩니다. 확인:
+
+```bash
+sysctl kern.ipc.somaxconn     # → 8192
+launchctl limit maxfiles       # → 65536  unlimited
+ulimit -n                      # → 65536 (터미널 재시작 필요)
+```
+
+### 3.1 시나리오 부하 테스트 (`load_test`)
+
+실제 브라우저 동작을 시뮬레이션. 각 유저가 `GET /` → 쿠키 획득 → SSE 연결 → admit 이벤트 대기 → 입장 완료.
+
+```bash
+# 기본 (1000명, 동시 500)
+./tests/run_load_test.sh
+
+# 옵션 지정
+./tests/run_load_test.sh --total 10000 --concurrency 2000
+
+# 전체 옵션
+./tests/run_load_test.sh --help
+```
+
+| 옵션 | 기본값 | 설명 |
+|------|--------|------|
+| `--total` | 1000 | 총 시뮬레이션 유저 수 |
+| `--concurrency` | 500 | 최대 동시 실행 태스크 |
+| `--sse-timeout` | 120 | SSE admit 대기 타임아웃 (초) |
+| `--url` | http://localhost:8080 | 서버 URL |
+| `--retries` | 3 | 세션 만료 시 재시도 횟수 |
+
+출력 예시:
+
+```
+=== Waiting Room SSE Load Test ===
+Total users: 1000
+Concurrency: 500
+
+  [100/1000] direct:100 sse:0 timeout:0 error:0
+  [500/1000] direct:100 sse:400 timeout:0 error:0
+  [1000/1000] direct:100 sse:900 timeout:0 error:0
+
+[Results] 45.2s elapsed
+  Admitted (direct):  100    ← max_active_users만큼 바로 입장 (302)
+  Admitted (SSE):     900    ← 대기 후 SSE admit으로 입장
+  Timeout:            0
+  Errors:             0
+```
+
+### 3.2 동시 연결 수 테스트 (`conn_test`)
+
+서버가 실제로 몇 개의 SSE 연결을 동시에 유지할 수 있는지 측정. admit 여부와 무관하게 연결만 열고 hold 시간 동안 유지.
+
+```bash
+# 기본 (1000개, 초당 200개 생성, 30초 유지)
+./tests/run_conn_test.sh
+
+# 대규모 테스트
+./tests/run_conn_test.sh --target 5000 --rate 500 --hold 60
+
+# 10000개 연결 테스트
+./tests/run_conn_test.sh --target 10000 --rate 1000 --hold 30
+```
+
+| 옵션 | 기본값 | 설명 |
+|------|--------|------|
+| `--target` | 1000 | 목표 동시 연결 수 |
+| `--rate` | 200 | 초당 연결 생성 속도 |
+| `--hold` | 30 | 연결 유지 시간 (초) |
+| `--url` | http://localhost:8080 | 서버 URL |
+
+출력 예시:
+
+```
+=== SSE Max Connection Test ===
+Target:    5000 connections
+Rate:      500/sec
+Hold:      60s
+
+  active:  1000  peak:  1000  opened:  1000  err:0/0  dropped:0
+  active:  2000  peak:  2000  opened:  2000  err:0/0  dropped:0
+  active:  5000  peak:  5000  opened:  5000  err:0/0  dropped:0
+
+=== Results (76.5s) ===
+  Peak concurrent SSE:  5000
+  Total opened:         5000
+  Connect errors:       0
+  SSE errors:           0
+  Dropped during hold:  0
+
+  PASS: reached target 5000 connections
+```
+
+### 3.3 두 테스트의 차이
+
+| | load_test | conn_test |
+|---|---|---|
+| 목적 | 유저 시나리오 (입장까지) | 순수 동시 연결 수 측정 |
+| SSE 동작 | admit 받으면 연결 종료 | hold 시간 동안 유지 |
+| 핵심 지표 | admitted / timeout / error | **peak concurrent connections** |
+| 연결 생성 | 전원 동시 (세마포어 제어) | rate 제어 (초당 N개) |
+
+### 3.4 트러블슈팅
+
+| 증상 | 원인 | 해결 |
+|------|------|------|
+| peak이 ~245에서 멈춤 | `ulimit -n` 256 (macOS 기본) | `ulimit -n 65536` 또는 `run_*.sh` 사용 |
+| "error sending request" 다수 | `kern.ipc.somaxconn` 128 | `sudo sysctl -w kern.ipc.somaxconn=8192` |
+| "Waiting room is disabled" | 활성 스케줄 없음 | Admin에서 스케줄 생성 |
+| 서버 변경 후에도 동일 증상 | 서버 미재시작 (이전 프로세스 FD 제한 유지) | 서버 재시작 |
 
 ---
 

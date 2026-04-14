@@ -36,10 +36,17 @@ async function request(path: string, options: RequestInit = {}) {
 
 export const api = {
   getConfig: () => request('/__wr/admin/config'),
+  patchConfig: (data: Record<string, unknown>) =>
+    request('/__wr/admin/config', { method: 'PATCH', body: JSON.stringify(data) }),
   getStatus: () => request('/__wr/status'),
   getSchedules: () => request('/__wr/admin/schedules'),
+  getArchives: () => request('/__wr/admin/schedules/archives'),
   createSchedule: (data: Record<string, unknown>) =>
     request('/__wr/admin/schedules', { method: 'POST', body: JSON.stringify(data) }),
+  patchSchedule: (id: string, data: Record<string, unknown>) =>
+    request(`/__wr/admin/schedules/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  stopSchedule: (id: string) =>
+    request(`/__wr/admin/schedules/${id}/stop`, { method: 'POST' }),
   deleteSchedule: (id: string) =>
     request(`/__wr/admin/schedules/${id}`, { method: 'DELETE' }),
 };

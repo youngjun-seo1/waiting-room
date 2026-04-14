@@ -30,6 +30,14 @@ redis = { version = "0.27", features = ["tokio-comp", "aio"] }
 deadpool-redis = "0.18"
 futures-util = "0.3"
 tokio-stream = { version = "0.1", features = ["sync"] }
+socket2 = "0.5"
+reqwest = { version = "0.12", features = ["cookies", "json", "stream"] }
+clap = { version = "4", features = ["derive"] }
 
-[dev-dependencies]
-reqwest = { version = "0.12", features = ["cookies", "json"] }
+[[bin]]
+name = "load_test"
+path = "tools/load_test.rs"
+
+[[bin]]
+name = "conn_test"
+path = "tools/conn_test.rs"

@@ -3,16 +3,21 @@ use axum::extract::{Path, State};
 use axum::http::{Request, StatusCode};
 use axum::middleware::Next;
 use axum::response::IntoResponse;
-use axum::{Json, Router, routing::{delete, get}};
+use axum::{Json, Router, routing::{delete, get, patch, post}};
+use chrono::Utc;
+use serde::Deserialize;
 use std::sync::Arc;
 use crate::scheduler::{CreateScheduleRequest, Schedule, SchedulePhase};
 use crate::state::AppState;
 
 pub fn admin_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
     Router::new()
-        .route("/config", get(get_config))
+        .route("/config", get(get_config).patch(patch_config))
         .route("/schedules", get(list_schedules).post(create_schedule))
+        .route("/schedules/archives", get(list_archives))
         .route("/schedules/{id}", delete(delete_schedule))
+        .route("/schedules/{id}/config", patch(patch_schedule))
+        .route("/schedules/{id}/stop", post(stop_schedule))
         .layer(axum::middleware::from_fn_with_state(state, auth_middleware))
 }
 
@@ -35,7 +40,7 @@ async fn auth_middleware(
 }
 
 async fn get_config(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let config = &state.original_config;
+    let config = state.config.read();
     Json(serde_json::json!({
         "listen_addr": config.listen_addr.to_string(),
         "origin_url": config.origin_url,
@@ -49,6 +54,133 @@ async fn get_config(State(state): State<Arc<AppState>>) -> impl IntoResponse {
             "logo_url": config.branding.logo_url,
         },
     }))
+}
+
+#[derive(Deserialize)]
+struct PatchConfigRequest {
+    max_active_users: Option<u32>,
+    session_ttl_secs: Option<u64>,
+    origin_url: Option<String>,
+}
+
+async fn patch_config(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<PatchConfigRequest>,
+) -> impl IntoResponse {
+    // Update runtime config
+    {
+        let mut config = state.config.write();
+        if let Some(v) = req.max_active_users {
+            config.max_active_users = v;
+        }
+        if let Some(v) = req.session_ttl_secs {
+            config.session_ttl_secs = v;
+        }
+        if let Some(v) = &req.origin_url {
+            config.origin_url = v.clone();
+        }
+    }
+
+    // Also update the active schedule's overrides so the scheduler
+    // doesn't overwrite our changes on the next tick
+    {
+        let mut schedules = state.schedules.write();
+        if let Some(active) = schedules.iter_mut().find(|s| s.phase == SchedulePhase::Active) {
+            if let Some(v) = req.max_active_users {
+                active.max_active_users = Some(v);
+            }
+            if let Some(v) = req.session_ttl_secs {
+                active.session_ttl_secs = Some(v);
+            }
+            if let Some(v) = req.origin_url {
+                active.origin_url = Some(v);
+            }
+        }
+    }
+
+    // Persist to Redis if available
+    crate::schedule_store::save_all_schedules(&state).await;
+
+    let config = state.config.read();
+    Json(serde_json::json!({
+        "status": "updated",
+        "max_active_users": config.max_active_users,
+        "session_ttl_secs": config.session_ttl_secs,
+        "origin_url": config.origin_url,
+    }))
+}
+
+#[derive(Deserialize)]
+struct PatchScheduleRequest {
+    max_active_users: Option<u32>,
+    session_ttl_secs: Option<u64>,
+    origin_url: Option<String>,
+}
+
+async fn patch_schedule(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(req): Json<PatchScheduleRequest>,
+) -> impl IntoResponse {
+    let found = {
+        let mut schedules = state.schedules.write();
+        if let Some(schedule) = schedules.iter_mut().find(|s| s.id == id) {
+            if let Some(v) = req.max_active_users {
+                schedule.max_active_users = Some(v);
+            }
+            if let Some(v) = req.session_ttl_secs {
+                schedule.session_ttl_secs = Some(v);
+            }
+            if let Some(v) = req.origin_url {
+                schedule.origin_url = Some(v);
+            }
+            Some(schedule.clone())
+        } else {
+            None
+        }
+    };
+
+    match found {
+        Some(schedule) => {
+            crate::schedule_store::save_all_schedules(&state).await;
+            (StatusCode::OK, Json(serde_json::json!({
+                "status": "updated",
+                "schedule": schedule,
+            }))).into_response()
+        }
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+async fn stop_schedule(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    let found = {
+        let mut schedules = state.schedules.write();
+        if let Some(schedule) = schedules.iter_mut().find(|s| s.id == id) {
+            if schedule.phase == SchedulePhase::Ended {
+                return (StatusCode::CONFLICT, Json(serde_json::json!({
+                    "error": "schedule already ended"
+                }))).into_response();
+            }
+            schedule.end_at = Utc::now();
+            Some(schedule.clone())
+        } else {
+            None
+        }
+    };
+
+    match found {
+        Some(schedule) => {
+            crate::schedule_store::save_all_schedules(&state).await;
+            (StatusCode::OK, Json(serde_json::json!({
+                "status": "stopped",
+                "schedule": schedule,
+            }))).into_response()
+        }
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
 }
 
 // --- Schedule endpoints ---
@@ -89,6 +221,11 @@ async fn create_schedule(
     });
     crate::schedule_store::save_schedule(&state, &schedule).await;
     Ok((StatusCode::CREATED, Json(response)))
+}
+
+async fn list_archives(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let archives = crate::archive_store::load_archives(&state).await;
+    Json(serde_json::json!({"archives": archives}))
 }
 
 async fn delete_schedule(

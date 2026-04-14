@@ -12,13 +12,13 @@ use crate::session::SessionManager;
 
 pub struct AppState {
     pub config: RwLock<Config>,
-    pub original_config: Config,
     pub queue: Arc<dyn QueueBackend>,
     pub session_mgr: SessionManager,
     pub sse_tx: broadcast::Sender<()>,
     pub http_client: HttpClient,
     pub redis_pool: Option<Pool>,
     pub schedules: RwLock<Vec<Schedule>>,
+    pub archives: RwLock<Vec<Schedule>>,
     pub enabled: AtomicBool,
 }
 
@@ -27,7 +27,6 @@ impl AppState {
         let secret = generate_hmac_secret();
         let (sse_tx, _) = broadcast::channel(128);
         Self {
-            original_config: config.clone(),
             config: RwLock::new(config),
             queue,
             session_mgr: SessionManager::new(&secret),
@@ -35,6 +34,7 @@ impl AppState {
             http_client: create_http_client(),
             redis_pool,
             schedules: RwLock::new(Vec::new()),
+            archives: RwLock::new(Vec::new()),
             enabled: AtomicBool::new(false),
         }
     }
