@@ -58,7 +58,7 @@ pub async fn gate_handler(
                 .body(Body::empty())
                 .unwrap();
             if needs_cookie {
-                let token = state.session_mgr.create_token(used_id);
+                let token = state.session_mgr.read().create_token(used_id);
                 set_cookie(&mut resp, &cookie_name, &token);
             }
             resp
@@ -67,7 +67,7 @@ pub async fn gate_handler(
             waiting::serve_waiting_page(&state, used_id).await
         }
         GateResult::Enqueued { .. } => {
-            let token = state.session_mgr.create_token(used_id);
+            let token = state.session_mgr.read().create_token(used_id);
             let mut resp = waiting::serve_waiting_page(&state, used_id).await;
             set_cookie(&mut resp, &cookie_name, &token);
             resp
@@ -143,7 +143,7 @@ fn extract_session(
     for part in cookie_header.split(';') {
         let trimmed: &str = part.trim();
         if let Some(value) = trimmed.strip_prefix(&format!("{}=", cookie_name)) {
-            return state.session_mgr.verify_token(value.trim());
+            return state.session_mgr.read().verify_token(value.trim());
         }
     }
     None

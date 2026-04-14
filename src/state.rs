@@ -13,7 +13,7 @@ use crate::session::SessionManager;
 pub struct AppState {
     pub config: RwLock<Config>,
     pub queue: Arc<dyn QueueBackend>,
-    pub session_mgr: SessionManager,
+    pub session_mgr: RwLock<SessionManager>,
     pub sse_tx: broadcast::Sender<()>,
     pub http_client: HttpClient,
     pub redis_pool: Option<Pool>,
@@ -29,13 +29,59 @@ impl AppState {
         Self {
             config: RwLock::new(config),
             queue,
-            session_mgr: SessionManager::new(&secret),
+            session_mgr: RwLock::new(SessionManager::new(&secret)),
             sse_tx,
             http_client: create_http_client(),
             redis_pool,
             schedules: RwLock::new(Vec::new()),
             archives: RwLock::new(Vec::new()),
             enabled: AtomicBool::new(false),
+        }
+    }
+
+    /// Redis 모드에서 HMAC secret을 서버 간 공유.
+    /// 첫 번째 서버가 secret을 Redis에 저장하고, 이후 서버들은 Redis에서 가져옴.
+    pub async fn sync_hmac_secret(&self) {
+        let Some(pool) = &self.redis_pool else { return };
+        let Ok(mut conn) = pool.get().await else { return };
+
+        // Redis에서 기존 secret 가져오기 시도
+        let existing: Option<Vec<u8>> = cmd("GET")
+            .arg("wr:hmac_secret")
+            .query_async(&mut *conn)
+            .await
+            .ok()
+            .flatten();
+
+        if let Some(secret) = existing {
+            *self.session_mgr.write() = crate::session::SessionManager::new(&secret);
+            tracing::info!("HMAC secret loaded from Redis");
+        } else {
+            // SET NX로 원자적 생성 (동시 시작 시 하나만 성공)
+            let secret = generate_hmac_secret();
+            let set_result: Option<String> = cmd("SET")
+                .arg("wr:hmac_secret")
+                .arg(&secret)
+                .arg("NX")
+                .query_async(&mut *conn)
+                .await
+                .ok()
+                .flatten();
+
+            if set_result.is_some() {
+                // 내가 첫 번째 → 내 secret 사용
+                *self.session_mgr.write() = crate::session::SessionManager::new(&secret);
+                tracing::info!("HMAC secret created and stored in Redis");
+            } else {
+                // 다른 서버가 먼저 저장함 → Redis에서 로드
+                let shared: Vec<u8> = cmd("GET")
+                    .arg("wr:hmac_secret")
+                    .query_async(&mut *conn)
+                    .await
+                    .unwrap();
+                *self.session_mgr.write() = crate::session::SessionManager::new(&shared);
+                tracing::info!("HMAC secret loaded from Redis (race resolved)");
+            }
         }
     }
 

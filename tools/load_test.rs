@@ -26,14 +26,17 @@ struct Args {
     #[arg(long, default_value = "http://localhost:8080")]
     url: String,
 
-    /// Max retries when SSE returns no data (session expired)
-    #[arg(long, default_value_t = 3)]
-    retries: u32,
+    /// Ramp-up time in seconds (0 = all users at once)
+    #[arg(long, default_value_t = 0)]
+    ramp_up: u64,
 }
 
 struct Counters {
+    get_count: AtomicU64,
+    sse_count: AtomicU64,
     admitted_direct: AtomicU64,
     admitted_sse: AtomicU64,
+    closed: AtomicU64,
     timeout: AtomicU64,
     error: AtomicU64,
 }
@@ -41,8 +44,11 @@ struct Counters {
 impl Counters {
     fn new() -> Self {
         Self {
+            get_count: AtomicU64::new(0),
+            sse_count: AtomicU64::new(0),
             admitted_direct: AtomicU64::new(0),
             admitted_sse: AtomicU64::new(0),
+            closed: AtomicU64::new(0),
             timeout: AtomicU64::new(0),
             error: AtomicU64::new(0),
         }
@@ -51,39 +57,26 @@ impl Counters {
     fn total(&self) -> u64 {
         self.admitted_direct.load(Ordering::Relaxed)
             + self.admitted_sse.load(Ordering::Relaxed)
+            + self.closed.load(Ordering::Relaxed)
             + self.timeout.load(Ordering::Relaxed)
             + self.error.load(Ordering::Relaxed)
     }
 }
 
-const MAX_CONNECT_RETRIES: u32 = 10;
-const RETRY_BASE_MS: u64 = 200;
-
-async fn request_with_retry(
+async fn send_request(
     client: &reqwest::Client,
     url: &str,
     cookie: Option<&str>,
     timeout_secs: u64,
 ) -> Result<reqwest::Response, String> {
-    for attempt in 0..MAX_CONNECT_RETRIES {
-        let mut req = client.get(url);
-        if let Some(c) = cookie {
-            req = req.header(header::COOKIE, c);
-        }
-        if timeout_secs > 0 {
-            req = req.timeout(Duration::from_secs(timeout_secs));
-        }
-        match req.send().await {
-            Ok(r) => return Ok(r),
-            Err(_) if attempt + 1 < MAX_CONNECT_RETRIES => {
-                let delay = (RETRY_BASE_MS * 2u64.pow(attempt)).min(5000);
-                tokio::time::sleep(Duration::from_millis(delay)).await;
-                continue;
-            }
-            Err(e) => return Err(format!("{}", e)),
-        }
+    let mut req = client.get(url);
+    if let Some(c) = cookie {
+        req = req.header(header::COOKIE, c);
     }
-    unreachable!()
+    if timeout_secs > 0 {
+        req = req.timeout(Duration::from_secs(timeout_secs));
+    }
+    req.send().await.map_err(|e| format!("{}", e))
 }
 
 async fn simulate_user(
@@ -94,119 +87,126 @@ async fn simulate_user(
     client: &reqwest::Client,
 ) {
     let url_count = urls.len();
+    let get_url = &urls[rand::rng().random_range(0..url_count)];
 
-    for attempt in 1..=args.retries {
-        let get_url = &urls[rand::rng().random_range(0..url_count)];
-
-        // Step 1: GET / → 쿠키 획득 (redirect 따라가지 않음)
-        let resp = match request_with_retry(client, &format!("{}/", get_url), None, 0).await {
-            Ok(r) => r,
-            Err(e) => {
-                eprintln!("[user {}] GET / failed after retries: {}", _id, e);
-                counters.error.fetch_add(1, Ordering::Relaxed);
-                return;
-            }
-        };
-
-        let status = resp.status().as_u16();
-
-        // 302 = 바로 입장 (origin redirect)
-        if status == 302 {
-            counters.admitted_direct.fetch_add(1, Ordering::Relaxed);
-            return;
-        }
-
-        if status != 200 {
-            eprintln!("[user {}] GET / unexpected status: {}", _id, status);
+    // Step 1: GET / → 쿠키 획득 (redirect 따라가지 않음)
+    counters.get_count.fetch_add(1, Ordering::Relaxed);
+    let resp = match send_request(client, &format!("{}/", get_url), None, 0).await {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("[user {}] GET / failed: {}", _id, e);
             counters.error.fetch_add(1, Ordering::Relaxed);
             return;
         }
+    };
 
-        // Set-Cookie에서 토큰 추출
-        let token = resp
-            .headers()
-            .get_all(header::SET_COOKIE)
-            .iter()
-            .filter_map(|v| v.to_str().ok())
-            .find(|s| s.starts_with("__wr_token="))
-            .and_then(|s| s.strip_prefix("__wr_token="))
-            .and_then(|s| s.split(';').next())
-            .map(|s| s.to_string());
+    let status = resp.status().as_u16();
 
-        let token = match token {
-            Some(t) => t,
-            None => {
-                eprintln!("[user {}] no __wr_token cookie in 200 response", _id);
-                counters.error.fetch_add(1, Ordering::Relaxed);
-                return;
-            }
-        };
+    // 302 = 바로 입장 (origin redirect)
+    if status == 302 {
+        counters.admitted_direct.fetch_add(1, Ordering::Relaxed);
+        return;
+    }
 
-        let sse_url = &urls[rand::rng().random_range(0..url_count)];
-        let cookie = format!("__wr_token={}", token);
-        let sse_resp = match request_with_retry(
-            client,
-            &format!("{}/__wr/events", sse_url),
-            Some(&cookie),
-            args.sse_timeout,
-        )
-        .await
-        {
-            Ok(r) => r,
-            Err(e) => {
-                eprintln!("[user {}] SSE connect failed after retries: {}", _id, e);
-                counters.error.fetch_add(1, Ordering::Relaxed);
-                return;
-            }
-        };
+    if status != 200 {
+        eprintln!("[user {}] GET / unexpected status: {}", _id, status);
+        counters.error.fetch_add(1, Ordering::Relaxed);
+        return;
+    }
 
-        let mut stream = sse_resp.bytes_stream();
-        let mut admitted = false;
-        let mut _got_any = false;
-        let mut buf = String::new();
+    // Set-Cookie에서 토큰 추출
+    let token = resp
+        .headers()
+        .get_all(header::SET_COOKIE)
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .find(|s| s.starts_with("__wr_token="))
+        .and_then(|s| s.strip_prefix("__wr_token="))
+        .and_then(|s| s.split(';').next())
+        .map(|s| s.to_string());
 
-        let deadline = Instant::now() + Duration::from_secs(args.sse_timeout);
-
-        while Instant::now() < deadline {
-            let chunk = tokio::time::timeout(
-                deadline.saturating_duration_since(Instant::now()),
-                stream.next(),
-            )
-            .await;
-
-            match chunk {
-                Ok(Some(Ok(bytes))) => {
-                    _got_any = true;
-                    buf.push_str(&String::from_utf8_lossy(&bytes));
-
-                    if buf.contains("\"admit\"") {
-                        admitted = true;
-                        break;
-                    }
-
-                    // 버퍼가 너무 커지면 마지막 1KB만 유지
-                    if buf.len() > 4096 {
-                        let keep = buf.len() - 1024;
-                        buf.drain(..keep);
-                    }
-                }
-                Ok(Some(Err(e))) => {
-                    eprintln!("[user {}] SSE stream error: {}", _id, e);
-                    break;
-                }
-                Ok(None) => break,
-                Err(_) => break,
-            }
-        }
-
-        if admitted {
-            counters.admitted_sse.fetch_add(1, Ordering::Relaxed);
+    let token = match token {
+        Some(t) => t,
+        None => {
+            eprintln!("[user {}] no __wr_token cookie in 200 response", _id);
+            counters.error.fetch_add(1, Ordering::Relaxed);
             return;
         }
+    };
 
-        // admit 못 받음 → GET /부터 재시도 (세션 만료 or 연결 끊김)
-        if attempt < args.retries {
-            continue;
+    // Step 2: SSE 연결 → admit/closed 대기
+    let sse_url = &urls[rand::rng().random_range(0..url_count)];
+    counters.sse_count.fetch_add(1, Ordering::Relaxed);
+    let cookie = format!("__wr_token={}", token);
+    let sse_resp = match send_request(
+        client,
+        &format!("{}/__wr/events", sse_url),
+        Some(&cookie),
+        args.sse_timeout,
+    )
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("[user {}] SSE connect failed: {}", _id, e);
+            counters.error.fetch_add(1, Ordering::Relaxed);
+            return;
+        }
+    };
+
+    let sse_status = sse_resp.status().as_u16();
+    if sse_status != 200 {
+        eprintln!("[user {}] SSE unexpected status: {}", _id, sse_status);
+        counters.error.fetch_add(1, Ordering::Relaxed);
+        return;
+    }
+
+    let mut stream = sse_resp.bytes_stream();
+    let mut buf = String::new();
+    let deadline = Instant::now() + Duration::from_secs(args.sse_timeout);
+
+    while Instant::now() < deadline {
+        let chunk = tokio::time::timeout(
+            deadline.saturating_duration_since(Instant::now()),
+            stream.next(),
+        )
+        .await;
+
+        match chunk {
+            Ok(Some(Ok(bytes))) => {
+                buf.push_str(&String::from_utf8_lossy(&bytes));
+
+                if buf.contains("\"admit\"") {
+                    counters.admitted_sse.fetch_add(1, Ordering::Relaxed);
+                    return;
+                }
+
+                if buf.contains("\"closed\"") {
+                    counters.closed.fetch_add(1, Ordering::Relaxed);
+                    return;
+                }
+
+                if buf.len() > 4096 {
+                    let keep = buf.len() - 1024;
+                    buf.drain(..keep);
+                }
+            }
+            Ok(Some(Err(e))) => {
+                eprintln!("[user {}] SSE stream error: {}", _id, e);
+                counters.error.fetch_add(1, Ordering::Relaxed);
+                return;
+            }
+            Ok(None) => {
+                // 서버가 스트림을 닫음 (세션 만료 등)
+                eprintln!("[user {}] SSE stream ended without admit/closed", _id);
+                counters.error.fetch_add(1, Ordering::Relaxed);
+                return;
+            }
+            Err(_) => {
+                // SSE 타임아웃
+                counters.timeout.fetch_add(1, Ordering::Relaxed);
+                return;
+            }
         }
     }
 
@@ -248,6 +248,9 @@ async fn main() {
     println!("Total users: {}", args.total);
     println!("Concurrency: {}", args.concurrency);
     println!("SSE timeout: {}s", args.sse_timeout);
+    if args.ramp_up > 0 {
+        println!("Ramp-up:     {}s ({:.0} users/sec)", args.ramp_up, args.total as f64 / args.ramp_up as f64);
+    }
     println!();
 
     let start = Instant::now();
@@ -261,13 +264,16 @@ async fn main() {
             tokio::time::sleep(Duration::from_secs(2)).await;
             let current = counters_progress.total();
             if current != last_total {
+                let gets = counters_progress.get_count.load(Ordering::Relaxed);
+                let sses = counters_progress.sse_count.load(Ordering::Relaxed);
                 let direct = counters_progress.admitted_direct.load(Ordering::Relaxed);
                 let sse = counters_progress.admitted_sse.load(Ordering::Relaxed);
+                let closed = counters_progress.closed.load(Ordering::Relaxed);
                 let timeouts = counters_progress.timeout.load(Ordering::Relaxed);
                 let errors = counters_progress.error.load(Ordering::Relaxed);
                 println!(
-                    "  [{}/{}] direct:{} sse:{} timeout:{} error:{}",
-                    current, total, direct, sse, timeouts, errors
+                    "  [{}/{}] GET:{} SSE:{} | direct:{} sse:{} closed:{} timeout:{} error:{}",
+                    current, total, gets, sses, direct, sse, closed, timeouts, errors
                 );
                 last_total = current;
             }
@@ -277,7 +283,13 @@ async fn main() {
         }
     });
 
-    // 유저 태스크 생성
+    // 유저 태스크 생성 (ramp-up 적용)
+    let ramp_delay = if args.ramp_up > 0 {
+        Duration::from_micros(args.ramp_up * 1_000_000 / args.total)
+    } else {
+        Duration::ZERO
+    };
+
     let mut handles = Vec::with_capacity(args.total as usize);
     for id in 1..=args.total {
         let args = args.clone();
@@ -290,6 +302,10 @@ async fn main() {
             let _permit = sem.acquire().await.unwrap();
             simulate_user(id, &urls, &args, &counters, &client).await;
         }));
+
+        if ramp_delay > Duration::ZERO {
+            tokio::time::sleep(ramp_delay).await;
+        }
     }
 
     // 모든 유저 완료 대기
@@ -301,16 +317,22 @@ async fn main() {
     let _ = progress_handle.await;
 
     // 결과 출력
+    let gets = counters.get_count.load(Ordering::Relaxed);
+    let sses = counters.sse_count.load(Ordering::Relaxed);
     let direct = counters.admitted_direct.load(Ordering::Relaxed);
     let sse = counters.admitted_sse.load(Ordering::Relaxed);
+    let closed = counters.closed.load(Ordering::Relaxed);
     let timeouts = counters.timeout.load(Ordering::Relaxed);
     let errors = counters.error.load(Ordering::Relaxed);
-    let total_done = direct + sse + timeouts + errors;
+    let total_done = direct + sse + closed + timeouts + errors;
 
     println!();
     println!("[Results] {:.1}s elapsed", elapsed.as_secs_f64());
+    println!("  GET / calls:        {}", gets);
+    println!("  SSE connections:    {}", sses);
     println!("  Admitted (direct):  {}", direct);
     println!("  Admitted (SSE):     {}", sse);
+    println!("  Closed:             {}", closed);
     println!("  Timeout:            {}", timeouts);
     println!("  Errors:             {}", errors);
     println!("  Total:              {} / {}", total_done, args.total);

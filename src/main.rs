@@ -63,6 +63,8 @@ async fn main() -> anyhow::Result<()> {
 
     // Spawn Redis Pub/Sub listener if Redis mode
     if !config.redis_url.is_empty() {
+        // Sync HMAC secret across servers
+        app_state.sync_hmac_secret().await;
         // Load enabled state from Redis on startup
         app_state.load_enabled_from_redis().await;
         pubsub::spawn_pubsub_listener(config.redis_url.clone(), app_state.clone());

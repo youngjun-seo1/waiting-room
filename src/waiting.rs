@@ -195,7 +195,7 @@ fn extract_session_from_cookie(
     for part in cookie_header.split(';') {
         let trimmed: &str = part.trim();
         if let Some(value) = trimmed.strip_prefix(&format!("{}=", cookie_name)) {
-            return state.session_mgr.verify_token(value.trim());
+            return state.session_mgr.read().verify_token(value.trim());
         }
     }
     None
