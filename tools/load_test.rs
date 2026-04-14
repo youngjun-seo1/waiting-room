@@ -1,5 +1,6 @@
 use clap::Parser;
 use futures_util::StreamExt;
+use rand::Rng;
 use reqwest::header;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -21,7 +22,7 @@ struct Args {
     #[arg(long, default_value_t = 1800)]
     sse_timeout: u64,
 
-    /// Waiting room URL
+    /// Waiting room URLs (comma-separated for multi-server, e.g. http://localhost:8080,http://localhost:8081)
     #[arg(long, default_value = "http://localhost:8080")]
     url: String,
 
@@ -87,13 +88,18 @@ async fn request_with_retry(
 
 async fn simulate_user(
     _id: u64,
+    urls: &[String],
     args: &Args,
     counters: &Counters,
     client: &reqwest::Client,
 ) {
+    let url_count = urls.len();
+
     for attempt in 1..=args.retries {
+        let get_url = &urls[rand::rng().random_range(0..url_count)];
+
         // Step 1: GET / → 쿠키 획득 (redirect 따라가지 않음)
-        let resp = match request_with_retry(client, &format!("{}/", args.url), None, 0).await {
+        let resp = match request_with_retry(client, &format!("{}/", get_url), None, 0).await {
             Ok(r) => r,
             Err(e) => {
                 eprintln!("[user {}] GET / failed after retries: {}", _id, e);
@@ -136,11 +142,11 @@ async fn simulate_user(
             }
         };
 
-        // Step 2: SSE 연결 (재시도 포함)
+        let sse_url = &urls[rand::rng().random_range(0..url_count)];
         let cookie = format!("__wr_token={}", token);
         let sse_resp = match request_with_retry(
             client,
-            &format!("{}/__wr/events", args.url),
+            &format!("{}/__wr/events", sse_url),
             Some(&cookie),
             args.sse_timeout,
         )
@@ -213,6 +219,11 @@ async fn main() {
     let counters = Arc::new(Counters::new());
     let semaphore = Arc::new(Semaphore::new(args.concurrency));
 
+    // URL 파싱 (콤마 구분)
+    let urls: Arc<Vec<String>> = Arc::new(
+        args.url.split(',').map(|s| s.trim().to_string()).collect()
+    );
+
     // redirect를 따라가지 않는 클라이언트
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
@@ -220,17 +231,20 @@ async fn main() {
         .build()
         .unwrap();
 
-    // Waiting room 활성화 확인
-    let status_resp = reqwest::get(&format!("{}/__wr/status", args.url))
-        .await
-        .expect("Failed to connect to server");
-    let status_json: serde_json::Value = status_resp.json().await.unwrap();
-    if status_json["enabled"] != true {
-        eprintln!("Error: Waiting room is disabled. Create a schedule first.");
-        std::process::exit(1);
+    // 각 서버의 Waiting room 활성화 확인
+    for url in urls.iter() {
+        let status_resp = reqwest::get(&format!("{}/__wr/status", url))
+            .await
+            .unwrap_or_else(|e| panic!("Failed to connect to {}: {}", url, e));
+        let status_json: serde_json::Value = status_resp.json().await.unwrap();
+        if status_json["enabled"] != true {
+            eprintln!("Error: Waiting room is disabled on {}. Create a schedule first.", url);
+            std::process::exit(1);
+        }
     }
 
     println!("=== Waiting Room SSE Load Test ===");
+    println!("Servers:     {} ({})", urls.len(), urls.join(", "));
     println!("Total users: {}", args.total);
     println!("Concurrency: {}", args.concurrency);
     println!("SSE timeout: {}s", args.sse_timeout);
@@ -267,13 +281,14 @@ async fn main() {
     let mut handles = Vec::with_capacity(args.total as usize);
     for id in 1..=args.total {
         let args = args.clone();
+        let urls = urls.clone();
         let counters = counters.clone();
         let sem = semaphore.clone();
         let client = client.clone();
 
         handles.push(tokio::spawn(async move {
             let _permit = sem.acquire().await.unwrap();
-            simulate_user(id, &args, &counters, &client).await;
+            simulate_user(id, &urls, &args, &counters, &client).await;
         }));
     }
 
@@ -300,12 +315,14 @@ async fn main() {
     println!("  Errors:             {}", errors);
     println!("  Total:              {} / {}", total_done, args.total);
 
-    // 큐 상태
-    if let Ok(resp) = reqwest::get(&format!("{}/__wr/status", args.url)).await {
-        if let Ok(json) = resp.json::<serde_json::Value>().await {
-            println!();
-            println!("[Queue Status]");
-            println!("{}", serde_json::to_string_pretty(&json).unwrap());
+    // 큐 상태 (각 서버)
+    println!();
+    println!("[Queue Status]");
+    for url in urls.iter() {
+        if let Ok(resp) = reqwest::get(&format!("{}/__wr/status", url)).await {
+            if let Ok(json) = resp.json::<serde_json::Value>().await {
+                println!("  {}: {}", url, serde_json::to_string(&json).unwrap());
+            }
         }
     }
 
