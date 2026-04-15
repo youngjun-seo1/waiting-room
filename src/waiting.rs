@@ -183,6 +183,7 @@ pub async fn status_handler(State(state): State<Arc<AppState>>) -> impl IntoResp
         "active_users": stats.active_count,
         "queue_length": stats.waiting_count,
         "total_admitted": stats.total_admitted,
+        "avg_active_duration_secs": stats.avg_active_duration_secs,
     }))
 }
 
