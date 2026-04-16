@@ -118,7 +118,73 @@ sudo sysctl -w net.inet.ip.portrange.first=10000
 sudo launchctl limit maxfiles 65536 200000
 ```
 
-> 세 명령 모두 재부팅 시 초기화됩니다. 영구 적용은 `/etc/sysctl.conf`와 `/Library/LaunchDaemons/limit.maxfiles.plist`를 참고.
+> 세 명령 모두 재부팅 시 초기화됩니다. 영구 적용하려면 아래 LaunchDaemon을 등록하세요.
+
+<details>
+<summary><b>재부팅 후에도 유지하기 (LaunchDaemon 등록)</b></summary>
+
+**1) sysctl 설정 (TCP backlog + 포트 범위)**
+
+```bash
+sudo tee /Library/LaunchDaemons/com.custom.sysctl.plist <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.custom.sysctl</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/sh</string>
+        <string>-c</string>
+        <string>sysctl -w kern.ipc.somaxconn=8192 net.inet.ip.portrange.first=10000</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+</dict>
+</plist>
+EOF
+```
+
+**2) FD 제한 (maxfiles)**
+
+```bash
+sudo tee /Library/LaunchDaemons/com.custom.maxfiles.plist <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.custom.maxfiles</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>launchctl</string>
+        <string>limit</string>
+        <string>maxfiles</string>
+        <string>65536</string>
+        <string>200000</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+</dict>
+</plist>
+EOF
+```
+
+**3) 권한 설정 및 로드**
+
+```bash
+sudo chmod 644 /Library/LaunchDaemons/com.custom.sysctl.plist
+sudo chmod 644 /Library/LaunchDaemons/com.custom.maxfiles.plist
+sudo launchctl load /Library/LaunchDaemons/com.custom.sysctl.plist
+sudo launchctl load /Library/LaunchDaemons/com.custom.maxfiles.plist
+```
+
+**4) 재부팅 후 확인** — 아래 검증 명령과 동일
+
+</details>
 
 설정 변경 후 **서버와 터미널을 모두 재시작**해야 적용됩니다. 확인:
 
